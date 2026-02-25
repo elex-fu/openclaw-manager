@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FileText, Search, FolderOpen, RefreshCw } from 'lucide-react'
 import { formatFileSize, formatDate, getFileIcon } from '@/lib/utils'
+import { FileScanner } from '@/components/FileScanner'
 import type { FileItem } from '@/types'
 
 export function FileListPage() {
@@ -30,6 +31,9 @@ export function FileListPage() {
 
   return (
     <div className="space-y-6">
+      {/* File Scanner */}
+      <FileScanner />
+
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
