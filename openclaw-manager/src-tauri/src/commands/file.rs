@@ -209,7 +209,7 @@ pub fn get_file_by_id(id: String) -> ApiResponse<Option<FileItem>> {
         )
     }) {
         Ok(file) => ApiResponse::success(Some(file)),
-        Err(rusqlite::Error::QueryReturnedNoRows) => ApiResponse::success(None),
+        Err(e) if e.to_string().contains("QueryReturnedNoRows") => ApiResponse::success(None),
         Err(e) => {
             log::error!("Failed to get file: {}", e);
             ApiResponse::error(format!("Failed to get file: {}", e))
@@ -230,7 +230,9 @@ pub fn update_file(req: UpdateFileRequest) -> ApiResponse<FileItem> {
         }
 
         if let Some(tags) = &req.tags {
-            let tags_json = serde_json::to_string(tags)?;
+            let tags_json = serde_json::to_string(tags).map_err(|e| {
+                rusqlite::Error::InvalidParameterName(format!("JSON error: {}", e))
+            })?;
             conn.execute(
                 "UPDATE files SET tags = ?1, updated_at = ?2 WHERE id = ?3",
                 params![tags_json, &now, &req.id],

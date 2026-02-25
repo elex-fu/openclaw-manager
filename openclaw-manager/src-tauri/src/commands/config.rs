@@ -26,7 +26,7 @@ pub fn get_config(key: String) -> ApiResponse<Option<Config>> {
         )
     }) {
         Ok(config) => ApiResponse::success(Some(config)),
-        Err(rusqlite::Error::QueryReturnedNoRows) => ApiResponse::success(None),
+        Err(e) if e.to_string().contains("QueryReturnedNoRows") => ApiResponse::success(None),
         Err(e) => {
             log::error!("Failed to get config: {}", e);
             ApiResponse::error(format!("Failed to get config: {}", e))

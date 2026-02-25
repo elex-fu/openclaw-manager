@@ -13,14 +13,14 @@ fn main() {
     env_logger::init();
 
     let tray_menu = SystemTrayMenu::new()
-        .add_item(SystemTrayMenuItem::new("显示", "show"))
+        .add_item(tauri::CustomMenuItem::new("show", "显示"))
         .add_native_item(SystemTrayMenuItem::Separator)
-        .add_item(SystemTrayMenuItem::new("退出", "quit"));
+        .add_item(tauri::CustomMenuItem::new("quit", "退出"));
 
     let system_tray = SystemTray::new().with_menu(tray_menu);
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
+        // .plugin(tauri_plugin_shell::init())
         .system_tray(system_tray)
         .on_system_tray_event(|app, event| match event {
             SystemTrayEvent::LeftClick {

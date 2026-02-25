@@ -41,7 +41,7 @@ pub fn get_groups(with_files: Option<bool>) -> ApiResponse<Vec<GroupWithFiles>> 
             let group = group?;
 
             let files = if include_files {
-                let mut file_stmt = conn.prepare(
+                let mut stmt = conn.prepare(
                     "SELECT f.id, f.file_name, f.file_path, f.file_type, f.file_size,
                      f.description, f.tags, f.is_collected, f.is_classified,
                      f.classification, f.custom_attributes, f.created_at, f.updated_at
@@ -51,7 +51,7 @@ pub fn get_groups(with_files: Option<bool>) -> ApiResponse<Vec<GroupWithFiles>> 
                      ORDER BY f.created_at DESC"
                 )?;
 
-                file_stmt.query_map(params![&group.id], |row| {
+                let files: Result<Vec<FileItem>, rusqlite::Error> = stmt.query_map(params![&group.id], |row| {
                     Ok(FileItem {
                         id: row.get(0)?,
                         file_name: row.get(1)?,
@@ -67,7 +67,8 @@ pub fn get_groups(with_files: Option<bool>) -> ApiResponse<Vec<GroupWithFiles>> 
                         created_at: row.get(11)?,
                         updated_at: row.get(12)?,
                     })
-                })?.collect::<Result<Vec<_>, _>>()?
+                })?.collect();
+                files?
             } else {
                 Vec::new()
             };
