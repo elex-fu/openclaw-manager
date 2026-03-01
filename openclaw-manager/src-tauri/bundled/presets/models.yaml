@@ -1,0 +1,202 @@
+# OpenClaw 国产模型预设配置
+# 预配置中国本土大模型，开箱即用
+
+version: "1.0.0"
+default_provider: "deepseek"
+
+# 模型提供商配置
+providers:
+  - id: "deepseek"
+    name: "DeepSeek"
+    type: "openai-compatible"
+    api_base: "https://api.deepseek.com/v1"
+    description: "深度求索，国产大模型领军者"
+    website: "https://platform.deepseek.com"
+    recommended: true
+    features:
+      - "超长上下文（128K）"
+      - "代码生成能力强"
+      - "中文理解优秀"
+      - "价格极具竞争力"
+
+  - id: "minimax"
+    name: "MiniMax"
+    type: "openai-compatible"
+    api_base: "https://api.minimax.chat/v1"
+    description: "稀宇科技，中文大模型创新者"
+    website: "https://platform.minimaxi.com"
+    recommended: true
+    features:
+      - "多模态能力"
+      - "语音合成"
+      - "角色扮演"
+
+  - id: "zhipu"
+    name: "智谱 AI"
+    type: "openai-compatible"
+    api_base: "https://open.bigmodel.cn/api/paas/v4"
+    description: "清华系，ChatGLM 系列大模型"
+    website: "https://open.bigmodel.cn"
+    recommended: true
+    features:
+      - "ChatGLM4 全系列"
+      - "代码生成 CodeGeeX"
+      - "多模态理解"
+
+  - id: "siliconflow"
+    name: "硅基流动"
+    type: "openai-compatible"
+    api_base: "https://api.siliconflow.cn/v1"
+    description: "开源模型聚合平台，一键调用 Llama、Qwen 等"
+    website: "https://siliconflow.cn"
+    recommended: false
+    features:
+      - "开源模型一站式"
+      - "Qwen、Llama、Yi 等"
+      - "按量计费"
+
+  - id: "baichuan"
+    name: "百川智能"
+    type: "openai-compatible"
+    api_base: "https://api.baichuan-ai.com/v1"
+    description: "王小川创立，Baichuan 系列大模型"
+    website: "https://platform.baichuan-ai.com"
+    recommended: false
+    features:
+      - "Baichuan4 最新"
+      - "企业级服务"
+      - "搜索增强"
+
+  - id: "moonshot"
+    name: "月之暗面"
+    type: "openai-compatible"
+    api_base: "https://api.moonshot.cn/v1"
+    description: "Kimi 大模型，超长上下文专家"
+    website: "https://platform.moonshot.cn"
+    recommended: true
+    features:
+      - "200万汉字上下文"
+      - "文档理解"
+      - "联网搜索"
+
+# 推荐模型配置
+recommended_models:
+  - id: "deepseek-chat"
+    name: "DeepSeek-V3"
+    provider: "deepseek"
+    model: "deepseek-chat"
+    description: "通用对话，性价比高，日常首选"
+    temperature: 0.7
+    max_tokens: 8192
+    context_window: 65536
+    price_per_1k: "输入¥0.001/输出¥0.002"
+
+  - id: "deepseek-coder"
+    name: "DeepSeek-Coder-V2"
+    provider: "deepseek"
+    model: "deepseek-coder"
+    description: "代码生成专用，编程助手首选"
+    temperature: 0.2
+    max_tokens: 8192
+    context_window: 65536
+    price_per_1k: "输入¥0.001/输出¥0.002"
+
+  - id: "minimax-text-01"
+    name: "MiniMax-Text-01"
+    provider: "minimax"
+    model: "MiniMax-Text-01"
+    description: "多模态通用模型"
+    temperature: 0.7
+    max_tokens: 4096
+    context_window: 32768
+
+  - id: "glm-4"
+    name: "GLM-4"
+    provider: "zhipu"
+    model: "glm-4"
+    description: "智谱最新旗舰模型"
+    temperature: 0.7
+    max_tokens: 4096
+    context_window: 128000
+
+  - id: "moonshot-v1-8k"
+    name: "Kimi-V1"
+    provider: "moonshot"
+    model: "moonshot-v1-8k"
+    description: "月之暗面，长文档处理专家"
+    temperature: 0.3
+    max_tokens: 4096
+    context_window: 8192
+
+# 默认系统配置
+system_defaults:
+  log_level: "info"
+  auto_update: true
+  theme: "system"
+  language: "zh-CN"
+
+  # 安全设置
+  security:
+    file_access_mode: "whitelist"  # whitelist/ask/all
+    allowed_paths:
+      - "~/Documents/OpenClaw"
+      - "~/Downloads"
+    blocked_paths:
+      - "~/.ssh"
+      - "~/.aws"
+      - "~/Library/Keychains"
+      - "C:\\Windows\\System32"
+    confirm_destructive: true
+    confirm_network: false
+
+# 技能商店配置
+skill_store:
+  enabled: true
+  registry_url: "https://skills.openclaw.cn"
+  default_categories:
+    - id: "productivity"
+      name: "办公效率"
+      icon: "💼"
+    - id: "coding"
+      name: "编程开发"
+      icon: "💻"
+    - id: "content"
+      name: "内容创作"
+      icon: "✍️"
+    - id: "data"
+      name: "数据处理"
+      icon: "📊"
+    - id: "automation"
+      name: "自动化"
+      icon: "🤖"
+
+# 首次启动向导配置
+first_run:
+  welcome_title: "欢迎使用 OpenClaw"
+  welcome_message: "OpenClaw 是您的智能 AI 助手，让我们一起完成初始化设置"
+
+  steps:
+    - id: "model"
+      title: "选择 AI 模型"
+      description: "我们为您预配置了多个国产大模型，选择一个开始"
+      required: true
+
+    - id: "apikey"
+      title: "配置 API Key"
+      description: "您的 API Key 将安全存储在系统钥匙串中"
+      required: true
+
+    - id: "workspace"
+      title: "设置工作目录"
+      description: "OpenClaw 将在此目录读写文件"
+      required: true
+      default_path: "~/Documents/OpenClaw"
+
+    - id: "skills"
+      title: "安装推荐技能"
+      description: "这些技能可以帮助您快速上手"
+      required: false
+      recommended_skills:
+        - "file-organizer"
+        - "web-search"
+        - "markdown-writer"
