@@ -65,7 +65,7 @@ impl RuntimePackage {
 
     /// 创建 Python 3.10 包配置
     pub fn python310() -> Self {
-        let (platform, arch, ext) = Self::get_platform_info();
+        let (platform, arch, _ext) = Self::get_platform_info();
         // Python 构建版本命名
         let archive_name = match platform.as_str() {
             "darwin" => format!("python-3.10.14-macos11-{arch}.tar.gz"),
@@ -268,7 +268,7 @@ impl RuntimeBundle {
     /// 解压 zip 文件
     async fn extract_zip(&self, source: &Path, target: &Path) -> Result<()> {
         use zip::ZipArchive;
-        use std::io::Cursor;
+        
         use tokio::task;
 
         let source = source.to_path_buf();

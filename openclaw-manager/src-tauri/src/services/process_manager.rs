@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
-use sysinfo::{Process, System};
+use sysinfo::System;
 use tokio::process::{Child, Command};
 use tokio::sync::{RwLock, broadcast};
 use tokio::time::{interval, timeout};
@@ -178,7 +178,7 @@ impl ProcessManager {
         log::info!("Service '{}' started with PID {}", name, pid);
 
         // 创建关闭通道
-        let (shutdown_tx, mut shutdown_rx) = tokio::sync::mpsc::channel(1);
+        let (shutdown_tx, shutdown_rx) = tokio::sync::mpsc::channel(1);
 
         let info = ServiceInfo {
             name: name.clone(),

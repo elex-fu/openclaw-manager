@@ -2,7 +2,7 @@
 
 use crate::errors::ApiResponse;
 use crate::services::config_manager::{ConfigManager, ConfigState, ModelConfig, AppConfig};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
@@ -203,7 +203,7 @@ pub struct ValidationResponse {
 }
 
 // 保持向后兼容的原有命令
-use crate::models::config::{Config, CreateConfigRequest, UpdateConfigRequest};
+use crate::models::config::{Config, CreateConfigRequest};
 
 /// 获取配置列表（旧版兼容）
 #[tauri::command]
@@ -214,7 +214,7 @@ pub async fn get_configs() -> Result<Vec<Config>, String> {
 
 /// 获取单个配置（旧版兼容）
 #[tauri::command]
-pub async fn get_config(id: String) -> Result<Option<Config>, String> {
+pub async fn get_config(_id: String) -> Result<Option<Config>, String> {
     // 返回 None，用于向后兼容
     Ok(None)
 }
@@ -236,7 +236,7 @@ pub async fn set_config(request: CreateConfigRequest) -> Result<Config, String> 
 
 /// 删除配置（旧版兼容）
 #[tauri::command]
-pub async fn delete_config(id: String) -> Result<bool, String> {
+pub async fn delete_config(_id: String) -> Result<bool, String> {
     // 模拟删除成功
     Ok(true)
 }

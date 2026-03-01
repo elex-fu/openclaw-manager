@@ -5,6 +5,6 @@
 pub mod app_error;
 
 pub use app_error::{
-    AppError, ApiResponse, ConfigError, ErrorSeverity, InstallError, NetworkError,
-    ProcessError, SecureStorageError, UserErrorMessage,
+    AppError, ApiResponse, ConfigError,
+    ProcessError, SecureStorageError,
 };

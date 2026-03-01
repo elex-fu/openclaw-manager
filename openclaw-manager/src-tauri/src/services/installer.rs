@@ -7,7 +7,6 @@ use crate::models::openclaw::{InstallResult, InstallStatus};
 use crate::services::offline_installer::OfflineInstaller;
 use crate::utils::retry::{retry_with_backoff, RetryConfig};
 use anyhow::{Context, Result};
-use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -95,7 +94,7 @@ impl InstallerService {
     async fn install_online(
         &self,
         version: Option<&str>,
-        progress_tx: Option<mpsc::Sender<InstallProgress>>,
+        _progress_tx: Option<mpsc::Sender<InstallProgress>>,
     ) -> Result<InstallResult> {
         // 使用重试机制从多个镜像源下载
         let config = RetryConfig {

@@ -1,10 +1,28 @@
 #!/bin/bash
-# 下载 OpenClaw 二进制文件用于离线安装
+# 下载或创建 OpenClaw 二进制文件用于离线安装
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUNDLED_DIR="$SCRIPT_DIR/../src-tauri/bundled"
+
+# 颜色输出
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
 
 # 确保目录存在
 mkdir -p "$BUNDLED_DIR"
@@ -13,7 +31,7 @@ mkdir -p "$BUNDLED_DIR"
 # 注意：这里使用示例URL，实际使用时需要替换为真实的OpenClaw下载地址
 GITHUB_REPO="openclai/openclaw"
 
-echo "=== OpenClaw 离线安装包下载脚本 ==="
+echo "=== OpenClaw 离线安装包下载/构建脚本 ==="
 echo ""
 
 # 检测当前平台
