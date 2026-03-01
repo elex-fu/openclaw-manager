@@ -1,0 +1,4 @@
+#!/bin/bash
+echo "OpenClaw CLI v0.1.0"
+echo "Usage: openclaw [command]"
+exit 0

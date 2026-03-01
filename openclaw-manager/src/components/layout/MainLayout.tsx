@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import {
-  FileText,
-  FolderOpen,
-  Puzzle,
+  LayoutDashboard,
+  Brain,
+  Bot,
+  Stethoscope,
   Settings,
   Menu,
   X,
+  Package
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -16,9 +18,10 @@ interface MainLayoutProps {
 }
 
 const navItems = [
-  { path: '/', label: '文件列表', icon: FileText },
-  { path: '/groups', label: '分组管理', icon: FolderOpen },
-  { path: '/plugins', label: '插件中心', icon: Puzzle },
+  { path: '/', label: '仪表盘', icon: LayoutDashboard },
+  { path: '/models', label: '模型配置', icon: Brain },
+  { path: '/agents', label: 'Agent 管理', icon: Bot },
+  { path: '/diagnostics', label: '诊断修复', icon: Stethoscope },
   { path: '/settings', label: '设置', icon: Settings },
 ]
 
@@ -38,7 +41,12 @@ export function MainLayout({ children }: MainLayoutProps) {
         <div className="flex h-full flex-col">
           {/* Logo */}
           <div className="flex h-16 items-center border-b px-6">
-            <h1 className="text-xl font-bold">OpenClaw Manager</h1>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+                <Package className="h-5 w-5 text-primary-foreground" />
+              </div>
+              <h1 className="text-lg font-bold">OpenClaw</h1>
+            </div>
           </div>
 
           {/* Navigation */}
@@ -67,7 +75,10 @@ export function MainLayout({ children }: MainLayoutProps) {
 
           {/* Footer */}
           <div className="border-t p-4 text-xs text-muted-foreground">
-            v0.1.0
+            <div className="flex items-center justify-between">
+              <span>v0.1.0</span>
+              <span>MVP</span>
+            </div>
           </div>
         </div>
       </aside>

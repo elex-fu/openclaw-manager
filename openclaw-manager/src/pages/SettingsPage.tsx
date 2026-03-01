@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Settings, FolderOpen, Bell, Shield } from 'lucide-react'
+import { Settings, FolderOpen, Bell, Shield, Package } from 'lucide-react'
+import { InstallerPanel } from '@/components/openclaw/InstallerPanel'
 
 export function SettingsPage() {
   return (
@@ -20,6 +21,10 @@ export function SettingsPage() {
           <TabsTrigger value="general">常规</TabsTrigger>
           <TabsTrigger value="scanning">文件扫描</TabsTrigger>
           <TabsTrigger value="notifications">通知</TabsTrigger>
+          <TabsTrigger value="openclaw">
+            <Package className="mr-2 h-4 w-4" />
+            OpenClaw
+          </TabsTrigger>
           <TabsTrigger value="advanced">高级</TabsTrigger>
         </TabsList>
 
@@ -33,6 +38,10 @@ export function SettingsPage() {
 
         <TabsContent value="notifications" className="space-y-4">
           <NotificationSettings />
+        </TabsContent>
+
+        <TabsContent value="openclaw" className="space-y-4">
+          <InstallerPanel />
         </TabsContent>
 
         <TabsContent value="advanced" className="space-y-4">
