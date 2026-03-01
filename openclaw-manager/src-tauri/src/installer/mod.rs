@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 
 // 引入 runtime_bundle 模块
 pub mod runtime_bundle;
-pub use runtime_bundle::{RuntimeBundle, RuntimeStatus, RuntimeType};
+pub use runtime_bundle::RuntimeBundle;
 
 /// 系统检查结果
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -1059,7 +1059,7 @@ exit 0
         let mut config = self.read_config()?;
 
         // 应用预设模型提供商
-        if let Ok(models_yaml) = std::fs::read_to_string(&presets.models_preset_path) {
+        if let Ok(_models_yaml) = std::fs::read_to_string(&presets.models_preset_path) {
             // 这里可以将预设的模型配置合并到现有配置
             log::info!("已加载国产模型预设配置");
 

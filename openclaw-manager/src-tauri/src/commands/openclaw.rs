@@ -3,7 +3,7 @@ use crate::models::openclaw::{AgentConfig, InstallResult, InstallStatus, ModelCo
 use crate::models::ApiResponse;
 use crate::services::installer::{InstallMethod, InstallMethodInfo, InstallerService};
 use std::sync::Arc;
-use tauri::{Emitter, Manager, State, Window};
+use tauri::{Emitter, State, Window};
 use tokio::sync::{mpsc, Mutex};
 
 /// 全局安装器状态
@@ -337,7 +337,7 @@ pub async fn is_openclaw_running(
     // 1. 检查是否已安装
     let install_status = match installer.check_installation() {
         Ok(status) => status,
-        Err(e) => {
+        Err(_e) => {
             return Ok(ApiResponse::success(OpenClawRuntimeStatus {
                 installed: false,
                 running: false,
@@ -510,7 +510,7 @@ pub async fn get_openclaw_process_info() -> Result<ApiResponse<Vec<OpenClawProce
                         if let Ok(pid) = parts[0].parse::<u32>() {
                             // 排除当前应用进程
                             if pid != std::process::id() {
-                                let cmd = parts[1..].join(" ");
+                                let _cmd = parts[1..].join(" ");
                                 all_processes.push(OpenClawProcessInfo {
                                     pid,
                                     name: "openclaw (npm)".to_string(),

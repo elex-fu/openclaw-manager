@@ -14,7 +14,7 @@ use commands::openclaw::InstallerState;
 use installer::OpenClawInstaller;
 use services::installer::InstallerService;
 use std::sync::Arc;
-use tauri::{Manager, AppHandle, App};
+use tauri::{Manager, App};
 use tokio::sync::Mutex;
 
 fn main() {

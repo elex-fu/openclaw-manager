@@ -1,5 +1,5 @@
 use crate::models::{
-    plugin::{InstallPluginRequest, Plugin, PluginMarketItem},
+    plugin::{InstallPluginRequest, Plugin},
     ApiResponse,
 };
 use std::collections::HashMap;

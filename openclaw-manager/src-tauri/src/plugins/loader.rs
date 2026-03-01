@@ -27,7 +27,7 @@ impl PluginLoader {
     }
 
     /// Install a plugin from a URL
-    pub async fn install_from_url(url: &str, target_dir: &Path) -> anyhow::Result<Plugin> {
+    pub async fn install_from_url(_url: &str, _target_dir: &Path) -> anyhow::Result<Plugin> {
         // TODO: Download and extract plugin
         // For now, this is a placeholder
         anyhow::bail!("Not implemented yet")
