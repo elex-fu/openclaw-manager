@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { 
-  OpenClawConfig, 
-  ModelConfig, 
-  AgentConfig, 
+import type {
+  OpenClawConfig,
+  ModelConfig,
+  AgentConfig,
   ServiceInfo,
-  SystemSettings 
+  SystemSettings,
+  AppSettings,
+  Theme
 } from '@/types';
 
 interface ConfigState {
@@ -46,6 +48,15 @@ interface ConfigState {
   setSettings: (settings: SystemSettings) => void;
   updateSettings: (updates: Partial<SystemSettings>) => void;
 
+  // 应用设置（独立存储，包含主题、启动、通知等）
+  appSettings: AppSettings;
+  setAppSettings: (settings: AppSettings) => void;
+  updateAppSettings: (updates: Partial<AppSettings>) => void;
+  setTheme: (theme: Theme) => void;
+  setStartupSetting: (key: keyof AppSettings['startup'], value: boolean) => void;
+  setNotificationEnabled: (enabled: boolean) => void;
+  setNotificationFilter: (filter: Partial<AppSettings['notifications']['filter']>) => void;
+
   // 配置加载状态
   isConfigLoaded: boolean;
   setConfigLoaded: (loaded: boolean) => void;
@@ -55,6 +66,9 @@ interface ConfigState {
   setApiKey: (providerId: string, key: string) => void;
   removeApiKey: (providerId: string) => void;
   clearApiKeyCache: () => void;
+
+  // 重置所有配置
+  resetAllSettings: () => void;
 }
 
 const defaultSettings: SystemSettings = {
@@ -65,9 +79,28 @@ const defaultSettings: SystemSettings = {
   custom_vars: {},
 };
 
+const defaultAppSettings: AppSettings = {
+  theme: 'system',
+  language: 'zh-CN',
+  startup: {
+    auto_start: false,
+    minimize_to_tray: true,
+    check_update_on_start: true,
+  },
+  notifications: {
+    enabled: true,
+    filter: {
+      info: true,
+      warning: true,
+      error: true,
+      success: true,
+    },
+  },
+};
+
 export const useConfigStore = create<ConfigState>()(
   persist(
-    (set, get) => ({
+    (set, _get) => ({
       // 初始状态
       config: null,
       models: [],
@@ -76,6 +109,7 @@ export const useConfigStore = create<ConfigState>()(
       services: [],
       gatewayStatus: 'stopped',
       settings: defaultSettings,
+      appSettings: defaultAppSettings,
       isConfigLoaded: false,
       apiKeyCache: {},
 
@@ -157,6 +191,42 @@ export const useConfigStore = create<ConfigState>()(
           settings: { ...state.settings, ...updates },
         })),
 
+      // 应用设置
+      setAppSettings: (appSettings) => set({ appSettings }),
+      updateAppSettings: (updates) =>
+        set((state) => ({
+          appSettings: { ...state.appSettings, ...updates },
+        })),
+      setTheme: (theme) =>
+        set((state) => ({
+          appSettings: { ...state.appSettings, theme },
+          settings: { ...state.settings, theme },
+        })),
+      setStartupSetting: (key, value) =>
+        set((state) => ({
+          appSettings: {
+            ...state.appSettings,
+            startup: { ...state.appSettings.startup, [key]: value },
+          },
+        })),
+      setNotificationEnabled: (enabled) =>
+        set((state) => ({
+          appSettings: {
+            ...state.appSettings,
+            notifications: { ...state.appSettings.notifications, enabled },
+          },
+        })),
+      setNotificationFilter: (filter) =>
+        set((state) => ({
+          appSettings: {
+            ...state.appSettings,
+            notifications: {
+              ...state.appSettings.notifications,
+              filter: { ...state.appSettings.notifications.filter, ...filter },
+            },
+          },
+        })),
+
       // 配置加载状态
       setConfigLoaded: (isConfigLoaded) => set({ isConfigLoaded }),
 
@@ -171,6 +241,17 @@ export const useConfigStore = create<ConfigState>()(
           return { apiKeyCache: rest };
         }),
       clearApiKeyCache: () => set({ apiKeyCache: {} }),
+
+      // 重置所有配置
+      resetAllSettings: () =>
+        set({
+          settings: defaultSettings,
+          appSettings: defaultAppSettings,
+          models: [],
+          agents: [],
+          currentAgentId: null,
+          apiKeyCache: {},
+        }),
     }),
     {
       name: 'config-storage',
@@ -179,6 +260,7 @@ export const useConfigStore = create<ConfigState>()(
         agents: state.agents,
         currentAgentId: state.currentAgentId,
         settings: state.settings,
+        appSettings: state.appSettings,
         // 注意：apiKeyCache 不会被持久化
       }),
     }

@@ -119,18 +119,6 @@ pub async fn uninstall_openclaw(
     }
 }
 
-/// 获取 OpenClaw 配置
-#[tauri::command]
-pub async fn get_openclaw_config(
-    state: State<'_, InstallerState>,
-) -> Result<ApiResponse<OpenClawConfig>, String> {
-    let installer = state.installer.lock().await;
-    match installer.read_config() {
-        Ok(config) => Ok(ApiResponse::success(config)),
-        Err(e) => Ok(ApiResponse::error(format!("读取配置失败: {}", e))),
-    }
-}
-
 /// 更新 OpenClaw 配置
 #[tauri::command]
 pub async fn update_openclaw_config(
@@ -644,4 +632,277 @@ pub async fn get_openclaw_process_info() -> Result<ApiResponse<Vec<OpenClawProce
     }
 
     Ok(ApiResponse::success(all_processes))
+}
+
+// ==================== 升级相关命令 ====================
+
+use crate::updater::{UpdateManager, UpdateState, UpdateInfo, UpdateProgress};
+
+/// 检查更新
+#[tauri::command]
+pub async fn check_for_updates(
+) -> Result<ApiResponse<UpdateState>, String> {
+    let update_manager = UpdateManager::new()
+        .map_err(|e| format!("创建更新管理器失败: {}", e))?;
+
+    match update_manager.check_update().await {
+        Ok(state) => Ok(ApiResponse::success(state)),
+        Err(e) => Ok(ApiResponse::error(format!("检查更新失败: {}", e))),
+    }
+}
+
+/// 执行升级
+#[tauri::command]
+pub async fn perform_update(
+    window: Window,
+    update_info: UpdateInfo,
+) -> Result<ApiResponse<crate::models::openclaw::InstallResult>, String> {
+    // 创建进度通道
+    let (progress_tx, mut progress_rx) = mpsc::channel::<UpdateProgress>(100);
+
+    // 在单独任务中发送进度事件
+    let window_clone = window.clone();
+    tokio::spawn(async move {
+        while let Some(progress) = progress_rx.recv().await {
+            let _ = window_clone.emit(
+                "update-progress",
+                serde_json::json!({
+                    "stage": progress.stage.to_string(),
+                    "percentage": progress.percentage,
+                    "message": progress.message,
+                    "canCancel": progress.can_cancel,
+                }),
+            );
+        }
+    });
+
+    let update_manager = UpdateManager::new()
+        .map_err(|e| format!("创建更新管理器失败: {}", e))?
+        .with_progress_channel(progress_tx);
+
+    match update_manager.update(&update_info).await {
+        Ok(result) => Ok(ApiResponse::success(result)),
+        Err(e) => Ok(ApiResponse::error(format!("升级失败: {}", e))),
+    }
+}
+
+/// 离线升级（使用本地安装包）
+#[tauri::command]
+pub async fn perform_offline_update(
+    window: Window,
+    package_path: String,
+) -> Result<ApiResponse<crate::models::openclaw::InstallResult>, String> {
+    // 创建进度通道
+    let (progress_tx, mut progress_rx) = mpsc::channel::<UpdateProgress>(100);
+
+    // 在单独任务中发送进度事件
+    let window_clone = window.clone();
+    tokio::spawn(async move {
+        while let Some(progress) = progress_rx.recv().await {
+            let _ = window_clone.emit(
+                "update-progress",
+                serde_json::json!({
+                    "stage": progress.stage.to_string(),
+                    "percentage": progress.percentage,
+                    "message": progress.message,
+                    "canCancel": progress.can_cancel,
+                }),
+            );
+        }
+    });
+
+    let update_manager = UpdateManager::new()
+        .map_err(|e| format!("创建更新管理器失败: {}", e))?
+        .with_progress_channel(progress_tx);
+
+    let path = std::path::PathBuf::from(package_path);
+    match update_manager.update_offline(&path).await {
+        Ok(result) => Ok(ApiResponse::success(result)),
+        Err(e) => Ok(ApiResponse::error(format!("离线升级失败: {}", e))),
+    }
+}
+
+/// 获取备份列表
+#[tauri::command]
+pub async fn get_backup_list(
+) -> Result<ApiResponse<Vec<crate::updater::BackupMetadata>>, String> {
+    let update_manager = UpdateManager::new()
+        .map_err(|e| format!("创建更新管理器失败: {}", e))?;
+
+    match update_manager.list_backups() {
+        Ok(backups) => Ok(ApiResponse::success(backups)),
+        Err(e) => Ok(ApiResponse::error(format!("获取备份列表失败: {}", e))),
+    }
+}
+
+/// 从备份恢复
+#[tauri::command]
+pub async fn restore_from_backup(
+    backup_path: String,
+) -> Result<ApiResponse<()>, String> {
+    let update_manager = UpdateManager::new()
+        .map_err(|e| format!("创建更新管理器失败: {}", e))?;
+
+    let path = std::path::PathBuf::from(backup_path);
+    match update_manager.restore_from_backup(&path).await {
+        Ok(_) => Ok(ApiResponse::success(())),
+        Err(e) => Ok(ApiResponse::error(format!("恢复备份失败: {}", e))),
+    }
+}
+
+// ==================== Agent 管理命令 ====================
+
+use crate::services::config_manager::ConfigManager;
+
+/// 获取所有 Agent 列表
+#[tauri::command]
+pub async fn get_all_agents(
+    state: State<'_, InstallerState>,
+) -> Result<ApiResponse<Vec<AgentConfig>>, String> {
+    let installer = state.installer.lock().await;
+
+    // 检查是否已安装
+    match installer.check_installation() {
+        Ok(InstallStatus::Installed { .. }) => {
+            // 读取配置
+            let config_path = installer.get_install_dir().join("config.yaml");
+            if config_path.exists() {
+                match std::fs::read_to_string(&config_path) {
+                    Ok(content) => {
+                        match OpenClawConfig::from_yaml(&content) {
+                            Ok(config) => Ok(ApiResponse::success(config.agents)),
+                            Err(e) => Ok(ApiResponse::error(format!("解析配置失败: {}", e))),
+                        }
+                    }
+                    Err(e) => Ok(ApiResponse::error(format!("读取配置失败: {}", e))),
+                }
+            } else {
+                // 返回默认 Agent
+                let default_config = OpenClawConfig::default_config();
+                Ok(ApiResponse::success(default_config.agents))
+            }
+        }
+        _ => {
+            // 未安装时返回默认 Agent
+            let default_config = OpenClawConfig::default_config();
+            Ok(ApiResponse::success(default_config.agents))
+        }
+    }
+}
+
+/// 保存 Agent（创建或更新）
+#[tauri::command]
+pub async fn save_agent(
+    state: State<'_, InstallerState>,
+    agent: AgentConfig,
+) -> Result<ApiResponse<AgentConfig>, String> {
+    let installer = state.installer.lock().await;
+
+    // 获取当前配置
+    let mut config = match installer.read_config() {
+        Ok(cfg) => cfg,
+        Err(_) => OpenClawConfig::default_config(),
+    };
+
+    // 查找是否已存在
+    let existing_index = config.agents.iter().position(|a| a.id == agent.id);
+
+    let agent_to_save = if let Some(index) = existing_index {
+        // 更新现有 Agent
+        let now = chrono::Utc::now().to_rfc3339();
+        let mut updated = agent.clone();
+        updated.updated_at = now;
+        // 保留创建时间
+        if config.agents[index].created_at.is_empty() {
+            updated.created_at = updated.updated_at.clone();
+        } else {
+            updated.created_at = config.agents[index].created_at.clone();
+        }
+        config.agents[index] = updated.clone();
+        updated
+    } else {
+        // 创建新 Agent
+        let now = chrono::Utc::now().to_rfc3339();
+        let mut new_agent = agent.clone();
+        new_agent.created_at = now.clone();
+        new_agent.updated_at = now;
+        config.agents.push(new_agent.clone());
+        new_agent
+    };
+
+    // 保存配置
+    match installer.write_config(&config) {
+        Ok(_) => Ok(ApiResponse::success(agent_to_save)),
+        Err(e) => Ok(ApiResponse::error(format!("保存配置失败: {}", e))),
+    }
+}
+
+/// 删除 Agent
+#[tauri::command]
+pub async fn delete_agent(
+    state: State<'_, InstallerState>,
+    id: String,
+) -> Result<ApiResponse<bool>, String> {
+    let installer = state.installer.lock().await;
+
+    // 获取当前配置
+    let mut config = match installer.read_config() {
+        Ok(cfg) => cfg,
+        Err(_) => return Ok(ApiResponse::error("无法读取配置".to_string())),
+    };
+
+    // 查找并删除
+    let original_len = config.agents.len();
+    config.agents.retain(|a| a.id != id);
+
+    if config.agents.len() == original_len {
+        return Ok(ApiResponse::error("Agent 不存在".to_string()));
+    }
+
+    // 保存配置
+    match installer.write_config(&config) {
+        Ok(_) => Ok(ApiResponse::success(true)),
+        Err(e) => Ok(ApiResponse::error(format!("保存配置失败: {}", e))),
+    }
+}
+
+/// 设置当前 Agent
+#[tauri::command]
+pub async fn set_current_agent(
+    _state: State<'_, InstallerState>,
+    id: String,
+) -> Result<ApiResponse<bool>, String> {
+    // 使用 ConfigManager 保存当前 Agent 设置
+    let config_manager = ConfigManager::new()
+        .map_err(|e| format!("创建配置管理器失败: {}", e))?;
+
+    match config_manager.set_current_agent(&id) {
+        Ok(_) => Ok(ApiResponse::success(true)),
+        Err(e) => Ok(ApiResponse::error(format!("设置当前 Agent 失败: {}", e))),
+    }
+}
+
+/// 获取当前 Agent
+#[tauri::command]
+pub async fn get_current_agent(
+    state: State<'_, InstallerState>,
+) -> Result<ApiResponse<Option<AgentConfig>>, String> {
+    let installer = state.installer.lock().await;
+
+    // 获取配置管理器中的当前 Agent ID
+    let config_manager = match ConfigManager::new() {
+        Ok(cm) => cm,
+        Err(_) => return Ok(ApiResponse::success(None)),
+    };
+
+    let current_id = config_manager.get_current_agent();
+
+    // 获取 Agent 列表
+    let config = match installer.read_config() {
+        Ok(cfg) => cfg,
+        Err(_) => return Ok(ApiResponse::success(None)),
+    };
+
+    let current_agent = config.agents.into_iter().find(|a| a.id == current_id);
+    Ok(ApiResponse::success(current_agent))
 }

@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { serviceApi } from '@/lib/tauri-api';
 import { useConfigStore } from '@/stores';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Play, 
-  Square, 
-  RefreshCw, 
-  Server, 
+import {
+  Play,
+  Square,
+  RefreshCw,
+  Server,
   Activity,
   AlertCircle,
   CheckCircle,
@@ -22,7 +22,6 @@ interface ServiceStatusProps {
 }
 
 export function ServiceStatus({ showActions = true, className }: ServiceStatusProps) {
-  const queryClient = useQueryClient();
   const { gatewayStatus, setGatewayStatus } = useConfigStore();
   const [isLoading, setIsLoading] = useState(false);
 

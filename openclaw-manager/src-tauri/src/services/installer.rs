@@ -2,8 +2,10 @@
 //!
 //! 支持在线和离线两种安装方式
 
-use crate::installer::{InstallProgress, InstallStage, OpenClawInstaller, SystemCheckResult};
-use crate::models::openclaw::{InstallResult, InstallStatus};
+#![allow(dead_code)]
+
+use crate::installer::{InstallProgress, InstallStage, OpenClawInstaller};
+use crate::models::openclaw::InstallResult;
 use crate::services::offline_installer::OfflineInstaller;
 use crate::utils::retry::{retry_with_backoff, RetryConfig};
 use anyhow::{Context, Result};
@@ -61,16 +63,6 @@ impl InstallerService {
         let mirrors = default_mirrors();
 
         Ok(Self { inner, mirrors })
-    }
-
-    /// 检查安装状态
-    pub fn check_installation(&self) -> Result<InstallStatus> {
-        self.inner.check_installation()
-    }
-
-    /// 检查系统环境
-    pub async fn check_system_environment(&self) -> Result<Vec<SystemCheckResult>> {
-        self.inner.check_system_environment().await
     }
 
     /// 安装 OpenClaw（支持在线和离线）
@@ -194,11 +186,6 @@ impl InstallerService {
         })
     }
 
-    /// 卸载 OpenClaw
-    pub fn uninstall(&self) -> Result<()> {
-        self.inner.uninstall()
-    }
-
     /// 获取可用的安装方法
     pub fn get_install_methods() -> Vec<InstallMethodInfo> {
         vec![
@@ -217,18 +204,6 @@ impl InstallerService {
                 available: true,
             },
         ]
-    }
-
-    /// 获取镜像源列表
-    pub fn get_mirrors(&self) -> &[MirrorSource] {
-        &self.mirrors
-    }
-
-    /// 添加自定义镜像源
-    pub fn add_mirror(&mut self, name: String, url: String, priority: u32) {
-        self.mirrors.push(MirrorSource { name, url, priority });
-        // 按优先级排序
-        self.mirrors.sort_by_key(|m| m.priority);
     }
 }
 

@@ -2,6 +2,8 @@
 //!
 //! 提供服务启动、停止、监控和健康检查功能
 
+#![allow(dead_code)]
+
 use crate::errors::{AppError, ProcessError};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -10,7 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use sysinfo::System;
 use tokio::process::{Child, Command};
-use tokio::sync::{RwLock, broadcast};
+use tokio::sync::{broadcast, RwLock};
 use tokio::time::{interval, timeout};
 
 /// 服务状态
@@ -120,11 +122,6 @@ impl ProcessManager {
             services: Arc::new(RwLock::new(HashMap::new())),
             event_sender,
         }
-    }
-
-    /// 获取事件接收器
-    pub fn subscribe(&self) -> broadcast::Receiver<ProcessEvent> {
-        self.event_sender.subscribe()
     }
 
     /// 启动服务
@@ -287,7 +284,7 @@ impl ProcessManager {
 
         let mut services = self.services.write().await;
         services.remove(name);
-        
+
         self.event_sender
             .send(ProcessEvent::Stopped { name: name.to_string() })
             .ok();
@@ -295,21 +292,34 @@ impl ProcessManager {
         Ok(())
     }
 
-    /// 强制停止服务
-    pub async fn kill_service(&self,
-        name: &str
-    ) -> Result<(), AppError> {
+    /// 强制终止服务
+    pub async fn force_kill(&self, name: &str) -> Result<(), AppError> {
         let mut services = self.services.write().await;
-        
-        if let Some(handle) = services.get_mut(name) {
-            let _ = handle.process.kill().await;
-            services.remove(name);
+
+        let handle = services.get_mut(name).ok_or_else(|| {
+            ProcessError::NotFound(name.to_string())
+        })?;
+
+        log::warn!("Force killing service '{}'", name);
+
+        // 强制终止进程
+        match handle.process.kill().await {
+            Ok(()) => {
+                log::info!("Service '{}' force killed", name);
+            }
+            Err(e) => {
+                log::error!("Failed to force kill service '{}': {}", name, e);
+                return Err(ProcessError::TerminateFailed(e.to_string()).into());
+            }
         }
-        
+
+        // 移除服务记录
+        services.remove(name);
+
         self.event_sender
             .send(ProcessEvent::Stopped { name: name.to_string() })
             .ok();
-            
+
         Ok(())
     }
 
@@ -319,15 +329,6 @@ impl ProcessManager {
     ) -> Option<ServiceStatus> {
         let services = self.services.read().await;
         services.get(name).map(|h| h.info.status.clone())
-    }
-
-    /// 获取所有服务状态
-    pub async fn get_all_status(&self) -> HashMap<String, ServiceStatus> {
-        let services = self.services.read().await;
-        services
-            .iter()
-            .map(|(k, v)| (k.clone(), v.info.status.clone()))
-            .collect()
     }
 
     /// 健康检查
@@ -409,30 +410,6 @@ impl ProcessManager {
             message: "Process is running".to_string(),
             response_time_ms: Some(response_time),
         })
-    }
-
-    /// 检查服务是否存在
-    pub async fn has_service(&self,
-        name: &str
-    ) -> bool {
-        let services = self.services.read().await;
-        services.contains_key(name)
-    }
-
-    /// 停止所有服务
-    pub async fn stop_all(&self,
-        timeout_secs: u64,
-    ) {
-        let names: Vec<String> = {
-            let services = self.services.read().await;
-            services.keys().cloned().collect()
-        };
-
-        for name in names {
-            if let Err(e) = self.stop_service(&name, timeout_secs).await {
-                log::error!("Failed to stop service '{}': {}", name, e);
-            }
-        }
     }
 
     // 私有方法

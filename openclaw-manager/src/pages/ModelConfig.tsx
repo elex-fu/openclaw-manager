@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -141,7 +142,7 @@ export function ModelConfigPage() {
 
   const handleAddModel = () => {
     setEditingModel({
-      
+      id: `model-${Date.now()}`,
       name: '',
       provider: 'openai',
       model: 'gpt-4',
@@ -374,7 +375,7 @@ export function ModelConfigPage() {
                 <Switch
                   id="enabled"
                   checked={editingModel.enabled}
-                  onCheckedChange={(checked) => setEditingModel({ ...editingModel, enabled: checked })}
+                  onCheckedChange={(checked: boolean) => setEditingModel({ ...editingModel, enabled: checked })}
                 />
                 <Label htmlFor="enabled">启用此模型</Label>
               </div>

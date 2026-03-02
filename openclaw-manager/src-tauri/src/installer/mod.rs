@@ -1,3 +1,6 @@
+// 允许未使用的代码，这些类型用于将来的功能扩展
+#![allow(dead_code)]
+
 use crate::models::openclaw::{InstallResult, InstallStatus, OpenClawConfig};
 use crate::system::SystemInfo;
 use anyhow::{Context, Result};
@@ -1051,7 +1054,7 @@ exit 0
     }
 
     /// 应用本土化预设配置（国产模型等）
-    async fn apply_china_presets(&self) -> Result<()> {
+    pub async fn apply_china_presets(&self) -> Result<()> {
         // 读取预设配置
         let presets = self.load_presets().await?;
 

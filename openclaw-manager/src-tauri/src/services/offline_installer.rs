@@ -1,5 +1,7 @@
 //! 离线安装包支持
 
+#![allow(dead_code)]
+
 use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde::{Serialize, Deserialize};
