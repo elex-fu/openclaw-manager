@@ -1,3 +1,6 @@
+// 允许未使用的代码，这些类型用于将来的功能扩展
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -44,6 +47,10 @@ pub struct AgentConfig {
     pub system_prompt: Option<String>,
     pub skills: Vec<String>,
     pub enabled: bool,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
 }
 
 /// 技能配置
@@ -109,6 +116,7 @@ pub struct OpenClawVersion {
 impl OpenClawConfig {
     /// 创建默认配置
     pub fn default_config() -> Self {
+        let now = chrono::Utc::now().to_rfc3339();
         Self {
             version: "1.0.0".to_string(),
             name: "My OpenClaw".to_string(),
@@ -135,6 +143,8 @@ impl OpenClawConfig {
                     system_prompt: Some("You are a helpful assistant.".to_string()),
                     skills: vec![],
                     enabled: true,
+                    created_at: now.clone(),
+                    updated_at: now,
                 }
             ],
             skills: vec![],

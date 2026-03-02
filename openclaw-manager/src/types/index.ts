@@ -161,7 +161,41 @@ export interface SkillConfig {
   enabled: boolean;
 }
 
-// 诊断问题类型
+// 诊断检查状态
+export type CheckStatus = 'pass' | 'warning' | 'error';
+
+// 诊断检查项
+export interface DiagnosticCheck {
+  category: 'system' | 'openclaw' | 'network' | 'service';
+  name: string;
+  status: CheckStatus;
+  message: string;
+  details?: string;
+  fixable: boolean;
+  fixSuggestion?: string;
+}
+
+// 诊断结果
+export interface DiagnosticResult {
+  checks: DiagnosticCheck[];
+  hasErrors: boolean;
+  hasWarnings: boolean;
+  checkedAt: string;
+}
+
+// 修复失败信息
+export interface FixFailure {
+  name: string;
+  error: string;
+}
+
+// 修复结果
+export interface FixResult {
+  fixed: string[];
+  failed: FixFailure[];
+}
+
+// 诊断问题类型（保留用于向后兼容）
 export type DiagnosticSeverity = 'info' | 'warning' | 'error' | 'critical';
 
 export interface DiagnosticIssue {
@@ -176,11 +210,30 @@ export interface DiagnosticIssue {
   error?: string;
 }
 
-export interface DiagnosticResult {
-  issues: DiagnosticIssue[];
-  hasErrors: boolean;
-  hasWarnings: boolean;
-  checkedAt: string;
+// 通知类型筛选
+export interface NotificationFilter {
+  info: boolean;
+  warning: boolean;
+  error: boolean;
+  success: boolean;
+}
+
+// 启动设置
+export interface StartupSettings {
+  auto_start: boolean;
+  minimize_to_tray: boolean;
+  check_update_on_start: boolean;
+}
+
+// 应用设置
+export interface AppSettings {
+  theme: Theme;
+  language: string;
+  startup: StartupSettings;
+  notifications: {
+    enabled: boolean;
+    filter: NotificationFilter;
+  };
 }
 
 // 系统设置

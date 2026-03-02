@@ -2,6 +2,8 @@
 //!
 //! 提供线程安全的配置管理，支持乐观锁并发控制
 
+#![allow(dead_code)]
+
 use crate::errors::{AppError, ConfigError};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -141,17 +143,61 @@ impl ValidationResult {
     }
 }
 
+/// 应用设置（存储在单独的文件中）
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AppSettings {
+    /// 当前选中的 Agent ID
+    pub current_agent_id: Option<String>,
+    /// 其他应用级设置
+    pub theme: String,
+    pub language: String,
+}
+
 /// 配置管理器
 pub struct ConfigManager {
     state: Arc<RwLock<ConfigState>>,
     config_path: PathBuf,
+    settings_path: PathBuf,
 }
 
 impl ConfigManager {
-    /// 创建新的配置管理器
-    pub async fn new(config_path: impl AsRef<Path>) -> Result<Self, AppError> {
+    /// 创建新的配置管理器（同步版本）
+    pub fn new() -> Result<Self, AppError> {
+        let config_dir = dirs::config_dir()
+            .ok_or_else(|| ConfigError::FileNotFound("无法获取配置目录".to_string()))?
+            .join("openclaw-manager");
+
+        let config_path = config_dir.join("config.yaml");
+        let settings_path = config_dir.join("settings.yaml");
+
+        // 确保配置目录存在（同步）
+        if let Some(parent) = config_path.parent() {
+            std::fs::create_dir_all(parent).map_err(AppError::Io)?;
+        }
+
+        // 加载或创建默认配置（同步）
+        let state = if config_path.exists() {
+            Self::load_from_file_sync(&config_path)?
+        } else {
+            let default = ConfigState::default();
+            Self::save_to_file_sync(&config_path, &default)?;
+            default
+        };
+
+        Ok(Self {
+            state: Arc::new(RwLock::new(state)),
+            config_path,
+            settings_path,
+        })
+    }
+
+    /// 创建新的配置管理器（异步版本）
+    pub async fn new_async(config_path: impl AsRef<Path>) -> Result<Self, AppError> {
         let config_path = config_path.as_ref().to_path_buf();
-        
+        let settings_path = config_path.parent()
+            .map(|p| p.join("settings.yaml"))
+            .unwrap_or_else(|| config_path.with_file_name("settings.yaml"));
+
         // 确保配置目录存在
         if let Some(parent) = config_path.parent() {
             fs::create_dir_all(parent).await.map_err(AppError::Io)?;
@@ -169,6 +215,7 @@ impl ConfigManager {
         Ok(Self {
             state: Arc::new(RwLock::new(state)),
             config_path,
+            settings_path,
         })
     }
 
@@ -177,9 +224,68 @@ impl ConfigManager {
         let config_dir = dirs::config_dir()
             .ok_or_else(|| ConfigError::FileNotFound("无法获取配置目录".to_string()))?
             .join("openclaw-manager");
-        
+
         let config_path = config_dir.join("config.yaml");
-        Self::new(config_path).await
+        Self::new_async(config_path).await
+    }
+
+    /// 设置当前 Agent
+    pub fn set_current_agent(&self, agent_id: &str) -> Result<(), AppError> {
+        let mut settings = self.load_settings_sync()?;
+        settings.current_agent_id = Some(agent_id.to_string());
+        self.save_settings_sync(&settings)?;
+        Ok(())
+    }
+
+    /// 获取当前 Agent ID
+    pub fn get_current_agent(&self) -> String {
+        self.load_settings_sync()
+            .ok()
+            .and_then(|s| s.current_agent_id)
+            .unwrap_or_else(|| "default-assistant".to_string())
+    }
+
+    /// 加载设置（同步）
+    fn load_settings_sync(&self) -> Result<AppSettings, AppError> {
+        if self.settings_path.exists() {
+            let content = std::fs::read_to_string(&self.settings_path)
+                .map_err(|e| ConfigError::FileNotFound(format!("无法读取设置文件: {}", e)))?;
+            serde_yaml::from_str(&content)
+                .map_err(|e| ConfigError::InvalidFormat(format!("YAML 解析错误: {}", e)).into())
+        } else {
+            Ok(AppSettings::default())
+        }
+    }
+
+    /// 保存设置（同步）
+    fn save_settings_sync(&self, settings: &AppSettings) -> Result<(), AppError> {
+        let yaml = serde_yaml::to_string(settings)
+            .map_err(|e| ConfigError::InvalidFormat(format!("序列化错误: {}", e)))?;
+        std::fs::write(&self.settings_path, yaml).map_err(AppError::Io)?;
+        Ok(())
+    }
+
+    /// 从文件加载配置（同步）
+    fn load_from_file_sync(path: impl AsRef<Path>) -> Result<ConfigState, AppError> {
+        let content = std::fs::read_to_string(path.as_ref()).map_err(|e| {
+            ConfigError::FileNotFound(format!("无法读取配置文件: {}", e))
+        })?;
+
+        serde_yaml::from_str(&content).map_err(|e| {
+            ConfigError::InvalidFormat(format!("YAML 解析错误: {}", e)).into()
+        })
+    }
+
+    /// 保存配置到文件（同步）
+    fn save_to_file_sync(
+        path: impl AsRef<Path>,
+        state: &ConfigState,
+    ) -> Result<(), AppError> {
+        let yaml = serde_yaml::to_string(state)
+            .map_err(|e| ConfigError::InvalidFormat(format!("序列化错误: {}", e)))?;
+
+        std::fs::write(path.as_ref(), yaml).map_err(AppError::Io)?;
+        Ok(())
     }
 
     /// 获取当前配置的只读引用

@@ -55,7 +55,7 @@ interface InstallState {
 
 export const useInstallStore = create<InstallState>()(
   persist(
-    (set, get) => ({
+    (set, _get) => ({
       // 初始状态
       installStatus: { type: 'NotInstalled' },
       progress: null,
@@ -83,7 +83,14 @@ export const useInstallStore = create<InstallState>()(
           level,
           message,
         };
-        set((state) => ({ logs: [...state.logs, entry] }));
+        set((state) => {
+          const newLogs = [...state.logs, entry];
+          // 限制日志数量最多 100 条
+          if (newLogs.length > 100) {
+            return { logs: newLogs.slice(-100) };
+          }
+          return { logs: newLogs };
+        });
       },
       clearLogs: () => set({ logs: [] }),
 

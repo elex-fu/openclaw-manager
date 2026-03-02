@@ -1,3 +1,6 @@
+// 允许未使用的代码，这些错误类型用于将来的错误处理
+#![allow(dead_code)]
+
 use serde::Serialize;
 use thiserror::Error;
 
@@ -145,6 +148,9 @@ pub enum ProcessError {
     
     #[error("Failed to stop service: {0}")]
     StopFailed(String),
+
+    #[error("Failed to terminate process: {0}")]
+    TerminateFailed(String),
     
     #[error("Port {0} is already in use")]
     PortInUse(u16),

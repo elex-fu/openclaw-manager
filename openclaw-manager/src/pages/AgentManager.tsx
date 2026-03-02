@@ -1,12 +1,22 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
-import { 
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Separator } from '@/components/ui/separator'
+import { SkeletonGrid } from '@/components/ui/skeleton'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -14,38 +24,120 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { 
-  Plus, 
-  Edit2, 
-  Trash2, 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  Plus,
+  Search,
   Bot,
-  Brain,
+  AlertCircle,
+  LayoutGrid,
+  List,
   CheckCircle,
-  User,
-  Sparkles
+  Sparkles,
 } from 'lucide-react'
-import { agentApi } from '@/lib/tauri-api'
+import { agentApi, modelApi } from '@/lib/tauri-api'
 import { useConfigStore } from '@/stores/configStore'
 import { useAppStore } from '@/stores/appStore'
+import { AgentCard } from '@/components/openclaw/AgentCard'
+import { EmptyListState, EmptySearchState } from '@/components/error'
+import { StaggerContainer, StaggerItem, ScaleIn } from '@/components/animation'
 import type { AgentConfig } from '@/types'
+
+// 表单验证错误类型
+interface FormErrors {
+  name?: string
+  modelId?: string
+  description?: string
+  systemPrompt?: string
+}
+
+// 验证表单
+function validateAgentForm(agent: Partial<AgentConfig>): FormErrors {
+  const errors: FormErrors = {}
+
+  if (!agent.name?.trim()) {
+    errors.name = '请输入 Agent 名称'
+  } else if (agent.name.length < 2) {
+    errors.name = '名称至少需要 2 个字符'
+  } else if (agent.name.length > 50) {
+    errors.name = '名称不能超过 50 个字符'
+  }
+
+  if (!agent.modelId) {
+    errors.modelId = '请选择使用的模型'
+  }
+
+  if (agent.description && agent.description.length > 200) {
+    errors.description = '描述不能超过 200 个字符'
+  }
+
+  if (agent.systemPrompt && agent.systemPrompt.length > 4000) {
+    errors.systemPrompt = '系统提示词不能超过 4000 个字符'
+  }
+
+  return errors
+}
 
 export function AgentManager() {
   const queryClient = useQueryClient()
   const { addNotification } = useAppStore()
-  const { setCurrentAgent, agents, currentAgentId } = useConfigStore()
-  
-  const [editingAgent, setEditingAgent] = useState<AgentConfig | null>(null)
+  const { currentAgentId } = useConfigStore()
+
+  // UI 状态
+  const [viewMode, setViewMode] = useState<'card' | 'list'>('card')
+  const [searchQuery, setSearchQuery] = useState('')
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [agentToDelete, setAgentToDelete] = useState<string | null>(null)
+  const [formErrors, setFormErrors] = useState<FormErrors>({})
+
+  // 编辑状态
+  const [editingAgent, setEditingAgent] = useState<Partial<AgentConfig> | null>(null)
+  const [isEditing, setIsEditing] = useState(false)
 
   // 查询所有 Agents
-  const { data: agentsData, isLoading } = useQuery({
+  const { data: agentsData, isLoading: isLoadingAgents, error: agentsError } = useQuery({
     queryKey: ['agents'],
     queryFn: () => agentApi.getAllAgents(),
   })
 
-  const currentAgent = agents.find(a => a.id === currentAgentId)
+  // 查询所有模型
+  const { data: modelsData, isLoading: isLoadingModels } = useQuery({
+    queryKey: ['models'],
+    queryFn: () => modelApi.getAllModels(),
+  })
 
   const agentsList = agentsData?.data || []
+  const modelsList = modelsData?.data || []
+
+  // 过滤 Agents
+  const filteredAgents = useMemo(() => {
+    if (!searchQuery.trim()) return agentsList
+    const query = searchQuery.toLowerCase()
+    return agentsList.filter(
+      (agent) =>
+        agent.name.toLowerCase().includes(query) ||
+        agent.description?.toLowerCase().includes(query) ||
+        agent.skills.some((skill) => skill.toLowerCase().includes(query))
+    )
+  }, [agentsList, searchQuery])
+
+  // 统计信息
+  const stats = useMemo(() => {
+    const total = agentsList.length
+    const enabled = agentsList.filter((a) => a.enabled).length
+    const disabled = total - enabled
+    return { total, enabled, disabled }
+  }, [agentsList])
 
   // 保存 Agent
   const saveMutation = useMutation({
@@ -54,21 +146,18 @@ export function AgentManager() {
       queryClient.invalidateQueries({ queryKey: ['agents'] })
       setIsDialogOpen(false)
       setEditingAgent(null)
+      setFormErrors({})
       addNotification({
-        
-        title: '保存成功',
-        message: 'Agent 配置已保存',
+        title: isEditing ? '更新成功' : '创建成功',
+        message: isEditing ? 'Agent 配置已更新' : '新 Agent 已创建',
         type: 'success',
-        
       })
     },
     onError: (error) => {
       addNotification({
-        
         title: '保存失败',
-        message: String(error),
+        message: String(error) || '请检查输入并重试',
         type: 'error',
-        
       })
     },
   })
@@ -78,237 +167,376 @@ export function AgentManager() {
     mutationFn: agentApi.deleteAgent,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agents'] })
+      setIsDeleteDialogOpen(false)
+      setAgentToDelete(null)
       addNotification({
-        
         title: '删除成功',
         message: 'Agent 已删除',
         type: 'success',
-        
       })
     },
-  })
-
-  // 设置当前 Agent
-  const setCurrentMutation = useMutation({
-    mutationFn: agentApi.setCurrentAgent,
-    onSuccess: (_, agentId) => {
-      setCurrentAgent(agentId)
-      queryClient.invalidateQueries({ queryKey: ['agents'] })
+    onError: (error) => {
       addNotification({
-        title: '切换成功',
-        message: '当前 Agent 已更新',
-        type: 'success',
+        title: '删除失败',
+        message: String(error) || '无法删除 Agent',
+        type: 'error',
       })
     },
   })
 
+
+  // 处理保存
   const handleSave = () => {
     if (!editingAgent) return
-    saveMutation.mutate(editingAgent)
+
+    // 验证表单
+    const errors = validateAgentForm(editingAgent)
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors)
+      return
+    }
+
+    // 构建完整的 Agent 配置
+    const now = new Date().toISOString()
+    const agentToSave: AgentConfig = {
+      id: editingAgent.id || crypto.randomUUID(),
+      name: editingAgent.name!.trim(),
+      description: editingAgent.description?.trim() || undefined,
+      modelId: editingAgent.modelId!,
+      systemPrompt: editingAgent.systemPrompt?.trim() || undefined,
+      skills: editingAgent.skills || [],
+      enabled: editingAgent.enabled ?? true,
+      createdAt: editingAgent.createdAt || now,
+      updatedAt: now,
+    }
+
+    saveMutation.mutate(agentToSave)
   }
 
+  // 打开创建对话框
   const handleAddAgent = () => {
+    setIsEditing(false)
     setEditingAgent({
-      id: crypto.randomUUID(),
       name: '',
       description: '',
-      modelId: '',
+      modelId: modelsList.length > 0 ? modelsList[0].id : '',
       systemPrompt: '',
       skills: [],
       enabled: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
     })
+    setFormErrors({})
     setIsDialogOpen(true)
   }
 
+  // 打开编辑对话框
   const handleEdit = (agent: AgentConfig) => {
+    setIsEditing(true)
     setEditingAgent({ ...agent })
+    setFormErrors({})
     setIsDialogOpen(true)
   }
 
-  const isCurrentAgent = (agent: AgentConfig) => {
-    return currentAgent?.id === agent.id
+  // 打开删除确认对话框
+  const handleDeleteClick = (id: string) => {
+    setAgentToDelete(id)
+    setIsDeleteDialogOpen(true)
   }
+
+  // 确认删除
+  const handleConfirmDelete = () => {
+    if (agentToDelete) {
+      deleteMutation.mutate(agentToDelete)
+    }
+  }
+
+  // 更新编辑状态
+  const updateEditingAgent = (updates: Partial<AgentConfig>) => {
+    setEditingAgent((prev) => (prev ? { ...prev, ...updates } : null))
+    // 清除相关错误
+    const newErrors = { ...formErrors }
+    Object.keys(updates).forEach((key) => {
+      delete newErrors[key as keyof FormErrors]
+    })
+    setFormErrors(newErrors)
+  }
+
+  // 当前 Agent
+  const currentAgent = agentsList.find((a) => a.id === currentAgentId)
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Agent 管理</h1>
-          <p className="text-muted-foreground">创建和管理 AI Agent 配置</p>
+      {/* 页面标题 */}
+      <ScaleIn>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Agent 管理</h1>
+            <p className="text-muted-foreground">创建和管理 AI Agent 配置</p>
+          </div>
+          <Button onClick={handleAddAgent} disabled={isLoadingModels} loading={isLoadingModels}>
+            <Plus className="mr-2 h-4 w-4" />
+            创建 Agent
+          </Button>
         </div>
-        <Button onClick={handleAddAgent}>
-          <Plus className="mr-2 h-4 w-4" />
-          创建 Agent
-        </Button>
-      </div>
+      </ScaleIn>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {isLoading ? (
-          <div className="col-span-full text-center py-8">加载中...</div>
-        ) : agentsList.length === 0 ? (
-          <Card className="col-span-full">
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Bot className="h-12 w-12 text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">尚未创建任何 Agent</p>
-              <Button className="mt-4" onClick={handleAddAgent}>
-                <Plus className="mr-2 h-4 w-4" />
-                创建第一个 Agent
-              </Button>
+      {/* 统计卡片 */}
+      <StaggerContainer className="grid gap-4 md:grid-cols-4">
+        <StaggerItem>
+          <Card className="hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">总 Agent 数</CardTitle>
+              <Bot className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.total}</div>
             </CardContent>
           </Card>
+        </StaggerItem>
+        <StaggerItem>
+          <Card className="hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">已启用</CardTitle>
+              <CheckCircle className="h-4 w-4 text-green-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">{stats.enabled}</div>
+            </CardContent>
+          </Card>
+        </StaggerItem>
+        <StaggerItem>
+          <Card className="hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">已禁用</CardTitle>
+              <Bot className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-muted-foreground">{stats.disabled}</div>
+            </CardContent>
+          </Card>
+        </StaggerItem>
+        <StaggerItem>
+          <Card className="hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">当前使用</CardTitle>
+              <Sparkles className="h-4 w-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-sm font-medium truncate">
+                {currentAgent?.name || '未设置'}
+              </div>
+            </CardContent>
+          </Card>
+        </StaggerItem>
+      </StaggerContainer>
+
+      {/* 错误提示 */}
+      {agentsError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>加载失败</AlertTitle>
+          <AlertDescription>
+            无法加载 Agent 列表，请检查网络连接或稍后重试。
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* 搜索和视图切换 */}
+      <ScaleIn delay={0.2}>
+        <div className="flex items-center gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="搜索 Agent 名称、描述或技能..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'card' | 'list')}>
+            <TabsList>
+              <TabsTrigger value="card">
+                <LayoutGrid className="h-4 w-4 mr-2" />
+                卡片
+              </TabsTrigger>
+              <TabsTrigger value="list">
+                <List className="h-4 w-4 mr-2" />
+                列表
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      </ScaleIn>
+
+      {/* Agent 列表 */}
+      {isLoadingAgents ? (
+        <SkeletonGrid columns={3} rows={2} />
+      ) : filteredAgents.length === 0 ? (
+        searchQuery ? (
+          <EmptySearchState
+            searchTerm={searchQuery}
+            onClear={() => setSearchQuery('')}
+          />
         ) : (
-          agentsList.map((agent) => (
-            <Card 
-              key={agent.id} 
-              className={isCurrentAgent(agent) ? 'border-primary ring-1 ring-primary' : ''}
-            >
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      {agent.avatar ? (
-                        <img src={agent.avatar} alt={agent.name} className="w-8 h-8 rounded-full" />
-                      ) : (
-                        <User className="h-4 w-4 text-primary" />
-                      )}
-                    </div>
-                    <div>
-                      <CardTitle className="text-base">{agent.name}</CardTitle>
-                      {isCurrentAgent(agent) && (
-                        <Badge variant="default" className="text-xs">
-                          <CheckCircle className="mr-1 h-3 w-3" />
-                          当前使用
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => handleEdit(agent)}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => deleteMutation.mutate(agent.id)}
-                      disabled={deleteMutation.isPending}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                <CardDescription className="mt-2">
-                  {agent.description || '无描述'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Brain className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">模型:</span>
-                    <span>{agent.modelId || '未设置'}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Sparkles className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">技能:</span>
-                    <span>{agent.skills.length} 个</span>
-                  </div>
-                </div>
-
-                {!isCurrentAgent(agent) && agent.enabled && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => setCurrentMutation.mutate(agent.id)}
-                    disabled={setCurrentMutation.isPending}
-                  >
-                    切换到此 Agent
-                  </Button>
-                )}
-
-                {!agent.enabled && (
-                  <Badge variant="secondary" className="w-full justify-center">已禁用</Badge>
-                )}
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
+          <EmptyListState
+            itemName="Agent"
+            onCreate={handleAddAgent}
+          />
+        )
+      ) : (
+        <TabsContent value={viewMode} className="mt-0">
+          {viewMode === 'card' ? (
+            <StaggerContainer className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {filteredAgents.map((agent) => (
+                <StaggerItem key={agent.id}>
+                  <AgentCard
+                    agent={agent}
+                    onEdit={handleEdit}
+                    onDelete={handleDeleteClick}
+                    viewMode="card"
+                  />
+                </StaggerItem>
+              ))}
+            </StaggerContainer>
+          ) : (
+            <StaggerContainer className="space-y-2">
+              {filteredAgents.map((agent) => (
+                <StaggerItem key={agent.id}>
+                  <AgentCard
+                    agent={agent}
+                    onEdit={handleEdit}
+                    onDelete={handleDeleteClick}
+                    viewMode="list"
+                  />
+                </StaggerItem>
+              ))}
+            </StaggerContainer>
+          )}
+        </TabsContent>
+      )}
 
       {/* 编辑/添加 Agent 对话框 */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingAgent?.id ? '编辑 Agent' : '创建 Agent'}</DialogTitle>
+            <DialogTitle>{isEditing ? '编辑 Agent' : '创建 Agent'}</DialogTitle>
             <DialogDescription>
-              配置 Agent 的行为和使用的模型
+              {isEditing
+                ? '修改 Agent 的配置信息'
+                : '配置新 Agent 的行为和使用的模型'}
             </DialogDescription>
           </DialogHeader>
 
           {editingAgent && (
             <div className="grid gap-4 py-4">
+              {/* 名称 */}
               <div className="space-y-2">
-                <Label htmlFor="name">名称 *</Label>
+                <Label htmlFor="name">
+                  名称 <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   id="name"
-                  value={editingAgent.name}
-                  onChange={(e) => setEditingAgent({ ...editingAgent, name: e.target.value })}
+                  value={editingAgent.name || ''}
+                  onChange={(e) => updateEditingAgent({ name: e.target.value })}
                   placeholder="例如: 代码助手"
+                  className={formErrors.name ? 'border-destructive' : ''}
                 />
+                {formErrors.name && (
+                  <p className="text-sm text-destructive">{formErrors.name}</p>
+                )}
               </div>
 
+              {/* 描述 */}
               <div className="space-y-2">
                 <Label htmlFor="description">描述</Label>
                 <Input
                   id="description"
                   value={editingAgent.description || ''}
-                  onChange={(e) => setEditingAgent({ ...editingAgent, description: e.target.value })}
+                  onChange={(e) => updateEditingAgent({ description: e.target.value })}
                   placeholder="简短描述这个 Agent 的用途"
+                  className={formErrors.description ? 'border-destructive' : ''}
                 />
+                {formErrors.description && (
+                  <p className="text-sm text-destructive">{formErrors.description}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {editingAgent.description?.length || 0}/200 字符
+                </p>
               </div>
 
+              {/* 模型选择 */}
               <div className="space-y-2">
-                <Label htmlFor="modelId">使用模型</Label>
-                <select
-                  id="modelId"
-                  className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                  value={editingAgent.modelId}
-                  onChange={(e) => setEditingAgent({ ...editingAgent, modelId: e.target.value })}
+                <Label htmlFor="modelId">
+                  使用模型 <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={editingAgent.modelId || ''}
+                  onValueChange={(value) => updateEditingAgent({ modelId: value })}
                 >
-                  <option value="">选择模型...</option>
-                  <option value="default-gpt4">GPT-4</option>
-                  <option value="default-claude">Claude 3</option>
-                </select>
+                  <SelectTrigger className={formErrors.modelId ? 'border-destructive' : ''}>
+                    <SelectValue placeholder="选择模型..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {modelsList.length === 0 ? (
+                      <SelectItem value="" disabled>
+                        暂无可用模型，请先配置模型
+                      </SelectItem>
+                    ) : (
+                      modelsList
+                        .filter((m) => m.enabled)
+                        .map((model) => (
+                          <SelectItem key={model.id} value={model.id}>
+                            {model.name} ({model.provider})
+                          </SelectItem>
+                        ))
+                    )}
+                  </SelectContent>
+                </Select>
+                {formErrors.modelId && (
+                  <p className="text-sm text-destructive">{formErrors.modelId}</p>
+                )}
               </div>
 
+              {/* 系统提示词 */}
               <div className="space-y-2">
                 <Label htmlFor="systemPrompt">系统提示词 (System Prompt)</Label>
                 <Textarea
                   id="systemPrompt"
                   value={editingAgent.systemPrompt || ''}
-                  onChange={(e) => setEditingAgent({ ...editingAgent, systemPrompt: e.target.value })}
+                  onChange={(e) => updateEditingAgent({ systemPrompt: e.target.value })}
                   placeholder="定义这个 Agent 的角色和行为..."
                   rows={4}
+                  className={formErrors.systemPrompt ? 'border-destructive' : ''}
                 />
+                {formErrors.systemPrompt && (
+                  <p className="text-sm text-destructive">{formErrors.systemPrompt}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {editingAgent.systemPrompt?.length || 0}/4000 字符
+                </p>
               </div>
 
+              {/* 启用状态 */}
               <div className="flex items-center space-x-2">
                 <input
                   type="checkbox"
                   id="enabled"
                   checked={editingAgent.enabled}
-                  onChange={(e) => setEditingAgent({ ...editingAgent, enabled: e.target.checked })}
+                  onChange={(e) => updateEditingAgent({ enabled: e.target.checked })}
                   className="h-4 w-4 rounded border-gray-300"
                 />
                 <Label htmlFor="enabled">启用此 Agent</Label>
+              </div>
+
+              <Separator />
+
+              {/* 提示信息 */}
+              <div className="text-sm text-muted-foreground">
+                <p>提示:</p>
+                <ul className="list-disc list-inside space-y-1 mt-1">
+                  <li>Agent 名称用于在列表中识别</li>
+                  <li>系统提示词定义了 Agent 的角色和行为</li>
+                  <li>禁用的 Agent 不会被使用</li>
+                </ul>
               </div>
             </div>
           )}
@@ -317,15 +545,41 @@ export function AgentManager() {
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               取消
             </Button>
-            <Button 
-              onClick={handleSave} 
+            <Button
+              onClick={handleSave}
               disabled={saveMutation.isPending || !editingAgent?.name}
+              loading={saveMutation.isPending}
+              loadingText={isEditing ? '保存中...' : '创建中...'}
             >
-              {saveMutation.isPending ? '保存中...' : '保存'}
+              {isEditing ? '保存修改' : '创建 Agent'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 删除确认对话框 */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              此操作不可撤销。删除后，该 Agent 的配置将被永久移除。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setAgentToDelete(null)}>
+              取消
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? '删除中...' : '删除'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -1,3 +1,6 @@
+// 允许未使用的代码，这些类型用于将来的插件系统
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

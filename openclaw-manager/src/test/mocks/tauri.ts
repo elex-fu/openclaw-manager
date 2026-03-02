@@ -1,3 +1,5 @@
+import { vi } from 'vitest'
+
 export const mockTauriApi = {
   invoke: vi.fn(),
   listen: vi.fn(() => Promise.resolve(() => {})),

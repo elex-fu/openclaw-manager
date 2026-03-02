@@ -1,21 +1,13 @@
 //! 服务控制相关命令
 
 use crate::errors::ApiResponse;
+use crate::services::diagnostics::{DiagnosticResult, DiagnosticService, FixResult};
 use crate::services::process_manager::{
-    HealthStatus, ProcessEvent, ProcessManager, ServiceStatus, StartServiceRequest,
+    HealthStatus, ProcessManager, ServiceStatus, StartServiceRequest,
 };
-use serde::Serialize;
-use std::collections::HashMap;
 use std::sync::Arc;
-use tauri::{Emitter, State};
+use tauri::State;
 use tokio::sync::Mutex;
-
-/// 服务状态响应
-#[derive(Debug, Serialize)]
-pub struct ServiceStatusResponse {
-    pub name: String,
-    pub status: ServiceStatus,
-}
 
 /// 启动服务
 #[tauri::command]
@@ -41,17 +33,6 @@ pub async fn stop_service(
     Ok(ApiResponse::from_result(result))
 }
 
-/// 强制停止服务
-#[tauri::command]
-pub async fn kill_service(
-    state: State<'_, Arc<Mutex<ProcessManager>>>,
-    name: String,
-) -> Result<ApiResponse<()>, ()> {
-    let manager = state.lock().await;
-    let result = manager.kill_service(&name).await;
-    Ok(ApiResponse::from_result(result))
-}
-
 /// 获取服务状态
 #[tauri::command]
 pub async fn get_service_status(
@@ -60,16 +41,6 @@ pub async fn get_service_status(
 ) -> Result<ApiResponse<Option<ServiceStatus>>, ()> {
     let manager = state.lock().await;
     let status = manager.get_status(&name).await;
-    Ok(ApiResponse::success(status))
-}
-
-/// 获取所有服务状态
-#[tauri::command]
-pub async fn get_all_service_status(
-    state: State<'_, Arc<Mutex<ProcessManager>>>,
-) -> Result<ApiResponse<HashMap<String, ServiceStatus>>, ()> {
-    let manager = state.lock().await;
-    let status = manager.get_all_status().await;
     Ok(ApiResponse::success(status))
 }
 
@@ -84,44 +55,32 @@ pub async fn health_check_service(
     Ok(ApiResponse::from_result(result))
 }
 
-/// 检查服务是否存在
+/// 运行诊断检查
 #[tauri::command]
-pub async fn has_service(
-    state: State<'_, Arc<Mutex<ProcessManager>>>,
-    name: String,
-) -> Result<ApiResponse<bool>, ()> {
-    let manager = state.lock().await;
-    let exists = manager.has_service(&name).await;
-    Ok(ApiResponse::success(exists))
+pub async fn run_diagnostics() -> Result<ApiResponse<DiagnosticResult>, ()> {
+    let service = DiagnosticService::new().map_err(|_| ())?;
+    let result = service.run_diagnostics().await;
+    Ok(ApiResponse::from_result(result))
 }
 
-/// 订阅进程事件（通过 Tauri 事件系统）
+/// 自动修复问题
 #[tauri::command]
-pub async fn subscribe_process_events(
-    state: State<'_, Arc<Mutex<ProcessManager>>>,
-    app_handle: tauri::AppHandle,
-) -> Result<(), ()> {
-    let manager = state.lock().await;
-    let mut rx = manager.subscribe();
-    drop(manager);
+pub async fn auto_fix_issues(issue_ids: Vec<String>) -> Result<ApiResponse<FixResult>, ()> {
+    let service = DiagnosticService::new().map_err(|_| ())?;
+    let result = service.auto_fix(issue_ids).await;
+    Ok(ApiResponse::from_result(result))
+}
 
-    tokio::spawn(async move {
-        while let Ok(event) = rx.recv().await {
-            let event_type = match &event {
-                ProcessEvent::Started { .. } => "service-started",
-                ProcessEvent::Stopped { .. } => "service-stopped",
-                ProcessEvent::Crashed { .. } => "service-crashed",
-                ProcessEvent::Log { .. } => "service-log",
-                ProcessEvent::StatusChanged { .. } => "service-status-changed",
-            };
-
-            if let Err(e) = app_handle.emit(event_type, event) {
-                log::error!("Failed to emit event: {}", e);
-                break;
-            }
+/// 修复单个问题
+#[tauri::command]
+pub async fn fix_issue(issue_name: String) -> Result<ApiResponse<bool>, ()> {
+    let service = DiagnosticService::new().map_err(|_| ())?;
+    let result = service.auto_fix(vec![issue_name]).await;
+    match result {
+        Ok(fix_result) => {
+            let success = !fix_result.fixed.is_empty();
+            Ok(ApiResponse::success(success))
         }
-    });
-
-    Ok(())
+        Err(e) => Ok(ApiResponse::error(e)),
+    }
 }
-

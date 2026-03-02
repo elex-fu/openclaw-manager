@@ -13,8 +13,50 @@ import type {
   AgentConfig,
   ServiceInfo,
   DiagnosticResult,
-  DiagnosticIssue,
+  FixResult,
 } from '@/types';
+
+// ==================== Error Handling ====================
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public code?: string,
+    public originalError?: unknown
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+export function handleApiResponse<T>(response: ApiResponse<T>): T {
+  if (!response.success) {
+    throw new ApiError(response.error || 'Unknown error');
+  }
+  if (response.data === null) {
+    throw new ApiError('Response data is null');
+  }
+  return response.data;
+}
+
+export async function invokeWithErrorHandling<T>(
+  command: string,
+  args?: Record<string, unknown>
+): Promise<T> {
+  try {
+    const response = await invoke<ApiResponse<T>>(command, args);
+    return handleApiResponse(response);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ApiError(
+      error instanceof Error ? error.message : 'Unknown error',
+      undefined,
+      error
+    );
+  }
+}
 
 // ==================== Config API ====================
 export const configApi = {
@@ -183,11 +225,11 @@ export const diagnosticsApi = {
   runDiagnostics: () =>
     invoke<ApiResponse<DiagnosticResult>>('run_diagnostics'),
 
-  autoFix: (issueIds: string[]) =>
-    invoke<ApiResponse<{ fixed: string[]; failed: { id: string; error: string }[] }>>('auto_fix_issues', { issueIds }),
+  autoFix: (issueNames: string[]) =>
+    invoke<ApiResponse<FixResult>>('auto_fix_issues', { issueIds: issueNames }),
 
-  fixIssue: (issue: DiagnosticIssue) =>
-    invoke<ApiResponse<boolean>>('fix_issue', { issue }),
+  fixIssue: (issueName: string) =>
+    invoke<ApiResponse<boolean>>('fix_issue', { issueName }),
 };
 
 // ==================== File API (废弃但保留向后兼容) ====================
@@ -283,4 +325,64 @@ export const groupApi = {
       groupId,
       fileId,
     }),
+};
+
+// ==================== Update API ====================
+export interface UpdateState {
+  currentVersion: string | null;
+  latestVersion: string | null;
+  hasUpdate: boolean;
+  updateInfo: UpdateInfo | null;
+}
+
+export interface UpdateInfo {
+  version: string;
+  releaseDate: string;
+  changelog: string;
+  downloadUrl: string;
+  checksum: string;
+  mandatory: boolean;
+  minSupportedVersion: string | null;
+}
+
+export interface UpdateProgress {
+  stage: 'Checking' | 'Downloading' | 'BackingUp' | 'Installing' | 'Migrating' | 'CleaningUp' | 'Complete' | 'Error' | 'Rollback';
+  percentage: number;
+  message: string;
+  canCancel: boolean;
+}
+
+export interface BackupMetadata {
+  createdAt: string;
+  version: string | null;
+  path: string;
+}
+
+export const updateApi = {
+  /** 检查更新 */
+  checkForUpdates: () =>
+    invoke<ApiResponse<UpdateState>>('check_for_updates'),
+
+  /** 执行升级 */
+  performUpdate: (updateInfo: UpdateInfo) =>
+    invoke<ApiResponse<InstallResult>>('perform_update', { updateInfo }),
+
+  /** 离线升级 */
+  performOfflineUpdate: (packagePath: string) =>
+    invoke<ApiResponse<InstallResult>>('perform_offline_update', { packagePath }),
+
+  /** 获取备份列表 */
+  getBackupList: () =>
+    invoke<ApiResponse<BackupMetadata[]>>('get_backup_list'),
+
+  /** 从备份恢复 */
+  restoreFromBackup: (backupPath: string) =>
+    invoke<ApiResponse<void>>('restore_from_backup', { backupPath }),
+
+  /** 监听升级进度 */
+  onUpdateProgress: (callback: (progress: UpdateProgress) => void) => {
+    return listen<UpdateProgress>('update-progress', (event) => {
+      callback(event.payload);
+    });
+  },
 };

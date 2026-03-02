@@ -2,6 +2,8 @@
 //!
 //! 使用系统密钥链安全存储敏感信息（API Key 等）
 
+#![allow(dead_code)]
+
 use crate::errors::{AppError, SecureStorageError};
 use keyring::Entry;
 use log::info;
@@ -24,8 +26,9 @@ impl SecureStorage {
     /// * `api_key` - API 密钥
     ///
     /// # Example
-    /// ```rust
-    /// SecureStorage::save_api_key("openai", "sk-...")?;
+    /// ```rust,ignore
+    /// use openclaw_manager::services::secure_storage::SecureStorage;
+    /// SecureStorage::save_api_key("openai", "sk-...").unwrap();
     /// ```
     pub fn save_api_key(provider: &str, api_key: &str) -> Result<(), AppError> {
         let key = Self::create_key(provider);

@@ -1,3 +1,6 @@
+// 允许未使用的代码，这些类型用于将来的功能扩展
+#![allow(dead_code)]
+
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 

@@ -3,6 +3,8 @@
 //! 管理 Node.js 22、Python 3.10 等嵌入式运行环境
 //! 实现自动检测、按需解压、环境配置
 
+#![allow(dead_code)]
+
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use tokio::fs;

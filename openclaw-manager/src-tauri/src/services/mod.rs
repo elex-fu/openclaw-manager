@@ -7,3 +7,7 @@ pub mod config_manager;
 pub mod process_manager;
 pub mod offline_installer;
 pub mod installer;
+pub mod diagnostics;
+
+#[cfg(test)]
+mod process_manager_test;
