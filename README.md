@@ -44,8 +44,8 @@
 ### 配置管理
 - [x] 可视化编辑 OpenClaw 配置
 - [x] 模型配置管理（添加、编辑、删除）
-- [x] Agent 配置管理
-- [x] 插件管理
+- [x] Agent 配置管理（启用/禁用开关）
+- [x] 技能商店（Skill Store）管理
 - [x] 配置文件导入/导出
 - [x] 配置验证和错误提示
 
@@ -53,8 +53,8 @@
 - [x] 启动/停止 OpenClaw 服务
 - [x] 服务状态实时监控
 - [x] 系统资源监控（CPU、内存、磁盘）
-- [x] 实时日志查看
-- [x] 自动重启配置
+- [x] 实时日志查看（WebSocket 流式传输）
+- [x] 版本升级管理（在线/离线）
 
 ### 安全与存储
 - [x] API 密钥安全存储（系统钥匙串）
@@ -66,6 +66,7 @@
 - [x] 网络连接测试
 - [x] 依赖项检测
 - [x] 一键修复常见问题
+- [x] 诊断告警显示
 
 ---
 
@@ -155,47 +156,82 @@ sudo rpm -i openclaw-manager-1.0.0.x86_64.rpm
 
 ### 3. 配置模型
 
-安装完成后，前往 **"模型管理"** 页面：
+安装完成后，前往 **"模型配置"** 页面：
 - 点击 **"添加模型"**
-- 选择模型提供商（OpenAI、Anthropic、Azure 等）
+- 选择模型提供商（OpenAI、Anthropic、Azure、Google、Ollama 等）
 - 输入 API 密钥（将安全存储在系统钥匙串中）
 - 配置模型参数
 
 ![Models Screen](./docs/screenshots/models.png)
 
-### 4. 启动服务
+### 4. 配置 Agent
 
-在 **"控制台"** 页面点击 **"启动服务"**，OpenClaw 将开始运行。
+前往 **"Agent 管理"** 页面：
+- 查看已配置的 Agent 列表
+- 启用/禁用特定 Agent
+- 配置 Agent 行为和参数
 
-### 5. 验证安装
+### 5. 浏览技能商店
+
+前往 **"技能商店"** 页面：
+- 浏览可用的 AI 技能
+- 安装所需的技能
+- 管理已安装的技能
+
+### 6. 启动服务
+
+在 **"仪表盘"** 页面点击 **"启动服务"**，OpenClaw 将开始运行。
+
+### 7. 验证安装
 
 服务启动后，您可以：
-- 查看实时日志确认服务正常运行
-- 使用内置的诊断工具验证配置
-- 测试 API 连接
+- 前往 **"日志查看"** 页面查看实时日志
+- 使用 **"诊断修复"** 工具验证配置
+- 在 **"设置"** 中配置其他选项
+- 通过 **"版本升级"** 检查更新
 
 ---
 
 ## 截图
 
-### 主界面
+### 仪表盘
 <p align="center">
   <img src="./docs/screenshots/dashboard.png" alt="Dashboard" width="800">
 </p>
 
-### 配置管理
+### 模型配置
 <p align="center">
-  <img src="./docs/screenshots/config.png" alt="Configuration" width="800">
+  <img src="./docs/screenshots/models.png" alt="Model Configuration" width="800">
 </p>
 
-### 模型管理
+### Agent 管理
 <p align="center">
-  <img src="./docs/screenshots/models.png" alt="Model Management" width="800">
+  <img src="./docs/screenshots/agents.png" alt="Agent Management" width="800">
+</p>
+
+### 技能商店
+<p align="center">
+  <img src="./docs/screenshots/skills.png" alt="Skill Store" width="800">
+</p>
+
+### 诊断修复
+<p align="center">
+  <img src="./docs/screenshots/diagnostics.png" alt="Diagnostics" width="800">
 </p>
 
 ### 日志查看
 <p align="center">
   <img src="./docs/screenshots/logs.png" alt="Log Viewer" width="800">
+</p>
+
+### 版本升级
+<p align="center">
+  <img src="./docs/screenshots/update.png" alt="Update Manager" width="800">
+</p>
+
+### 设置
+<p align="center">
+  <img src="./docs/screenshots/settings.png" alt="Settings" width="800">
 </p>
 
 ---
@@ -216,7 +252,7 @@ sudo rpm -i openclaw-manager-1.0.0.x86_64.rpm
 - **Rust** - 高性能系统编程语言
 - **Tauri v2** - 跨平台桌面应用框架
 - **Tokio** - 异步运行时
-- **SQLite** - 本地数据存储
+- **keyring** - 系统钥匙串安全存储
 
 ### 前端
 - **React 18** - 用户界面库
@@ -225,11 +261,11 @@ sudo rpm -i openclaw-manager-1.0.0.x86_64.rpm
 - **shadcn/ui** - 高质量的 React 组件
 - **Zustand** - 轻量级状态管理
 - **TanStack Query** - 服务器状态管理
+- **Framer Motion** - 动画库
 
 ### 开发工具
 - **Vite** - 快速的前端构建工具
 - **Vitest** - 单元测试框架
-- **Playwright** - E2E 测试框架
 - **ESLint** - 代码质量检查
 
 ---
