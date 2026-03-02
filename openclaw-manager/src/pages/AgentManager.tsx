@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, memo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -50,6 +50,7 @@ import { useAppStore } from '@/stores/appStore'
 import { AgentCard } from '@/components/openclaw/AgentCard'
 import { EmptyListState, EmptySearchState } from '@/components/error'
 import { StaggerContainer, StaggerItem, ScaleIn } from '@/components/animation'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import type { AgentConfig } from '@/types'
 
 // 表单验证错误类型
@@ -60,37 +61,168 @@ interface FormErrors {
   systemPrompt?: string
 }
 
-// 验证表单
-function validateAgentForm(agent: Partial<AgentConfig>): FormErrors {
-  const errors: FormErrors = {}
+// 验证表单 - 使用 useCallback
+function useValidateAgentForm() {
+  return useCallback((agent: Partial<AgentConfig>): FormErrors => {
+    const errors: FormErrors = {}
 
-  if (!agent.name?.trim()) {
-    errors.name = '请输入 Agent 名称'
-  } else if (agent.name.length < 2) {
-    errors.name = '名称至少需要 2 个字符'
-  } else if (agent.name.length > 50) {
-    errors.name = '名称不能超过 50 个字符'
-  }
+    if (!agent.name?.trim()) {
+      errors.name = '请输入 Agent 名称'
+    } else if (agent.name.length < 2) {
+      errors.name = '名称至少需要 2 个字符'
+    } else if (agent.name.length > 50) {
+      errors.name = '名称不能超过 50 个字符'
+    }
 
-  if (!agent.modelId) {
-    errors.modelId = '请选择使用的模型'
-  }
+    if (!agent.modelId) {
+      errors.modelId = '请选择使用的模型'
+    }
 
-  if (agent.description && agent.description.length > 200) {
-    errors.description = '描述不能超过 200 个字符'
-  }
+    if (agent.description && agent.description.length > 200) {
+      errors.description = '描述不能超过 200 个字符'
+    }
 
-  if (agent.systemPrompt && agent.systemPrompt.length > 4000) {
-    errors.systemPrompt = '系统提示词不能超过 4000 个字符'
-  }
+    if (agent.systemPrompt && agent.systemPrompt.length > 4000) {
+      errors.systemPrompt = '系统提示词不能超过 4000 个字符'
+    }
 
-  return errors
+    return errors
+  }, [])
 }
+
+// 统计卡片组件 - 使用 memo
+const StatCard = memo(function StatCard({
+  title,
+  value,
+  icon: Icon,
+  className,
+}: {
+  title: string
+  value: string | number
+  icon: React.ElementType
+  className?: string
+}) {
+  return (
+    <Card className="hover:shadow-md transition-shadow">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <Icon className="h-4 w-4 text-muted-foreground" />
+      </CardHeader>
+      <CardContent>
+        <div className={`text-2xl font-bold ${className}`}>{value}</div>
+      </CardContent>
+    </Card>
+  )
+})
+
+// 虚拟化 Agent 列表组件
+interface VirtualAgentListProps {
+  agents: AgentConfig[]
+  onEdit: (agent: AgentConfig) => void
+  onDelete: (id: string) => void
+  viewMode: 'card' | 'list'
+}
+
+const VirtualAgentList = memo(function VirtualAgentList({
+  agents,
+  onEdit,
+  onDelete,
+  viewMode,
+}: VirtualAgentListProps) {
+  const parentRef = useRef<HTMLDivElement>(null)
+
+  const virtualizer = useVirtualizer({
+    count: agents.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => (viewMode === 'card' ? 280 : 120),
+    overscan: 3,
+  })
+
+  const virtualItems = virtualizer.getVirtualItems()
+
+  if (viewMode === 'card') {
+    return (
+      <div ref={parentRef} className="h-[600px] overflow-auto">
+        <div
+          style={{
+            height: `${virtualizer.getTotalSize()}px`,
+            width: '100%',
+            position: 'relative',
+          }}
+          className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
+        >
+          {virtualItems.map((virtualItem) => {
+            const agent = agents[virtualItem.index]
+            return (
+              <div
+                key={agent.id}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: `${(virtualItem.index % 3) * 33.33}%`,
+                  width: '33.33%',
+                  height: `${virtualItem.size}px`,
+                  transform: `translateY(${virtualItem.start}px)`,
+                  padding: '0 0.5rem',
+                }}
+              >
+                <AgentCard
+                  agent={agent}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                  viewMode="card"
+                />
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  // 列表视图
+  return (
+    <div ref={parentRef} className="h-[600px] overflow-auto space-y-2">
+      <div
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {virtualItems.map((virtualItem) => {
+          const agent = agents[virtualItem.index]
+          return (
+            <div
+              key={agent.id}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: `${virtualItem.size}px`,
+                transform: `translateY(${virtualItem.start}px)`,
+              }}
+            >
+              <AgentCard
+                agent={agent}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                viewMode="list"
+              />
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+})
 
 export function AgentManager() {
   const queryClient = useQueryClient()
   const { addNotification } = useAppStore()
   const { currentAgentId } = useConfigStore()
+  const validateAgentForm = useValidateAgentForm()
 
   // UI 状态
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card')
@@ -104,22 +236,25 @@ export function AgentManager() {
   const [editingAgent, setEditingAgent] = useState<Partial<AgentConfig> | null>(null)
   const [isEditing, setIsEditing] = useState(false)
 
-  // 查询所有 Agents
+  // 查询所有 Agents - 使用优化配置
   const { data: agentsData, isLoading: isLoadingAgents, error: agentsError } = useQuery({
     queryKey: ['agents'],
     queryFn: () => agentApi.getAllAgents(),
+    staleTime: 1000 * 30, // 30秒
+    gcTime: 1000 * 60 * 5, // 5分钟
   })
 
   // 查询所有模型
   const { data: modelsData, isLoading: isLoadingModels } = useQuery({
     queryKey: ['models'],
     queryFn: () => modelApi.getAllModels(),
+    staleTime: 1000 * 60 * 5, // 5分钟
   })
 
   const agentsList = agentsData?.data || []
   const modelsList = modelsData?.data || []
 
-  // 过滤 Agents
+  // 过滤 Agents - 使用 useMemo
   const filteredAgents = useMemo(() => {
     if (!searchQuery.trim()) return agentsList
     const query = searchQuery.toLowerCase()
@@ -131,7 +266,7 @@ export function AgentManager() {
     )
   }, [agentsList, searchQuery])
 
-  // 统计信息
+  // 统计信息 - 使用 useMemo
   const stats = useMemo(() => {
     const total = agentsList.length
     const enabled = agentsList.filter((a) => a.enabled).length
@@ -184,9 +319,8 @@ export function AgentManager() {
     },
   })
 
-
-  // 处理保存
-  const handleSave = () => {
+  // 处理保存 - 使用 useCallback
+  const handleSave = useCallback(() => {
     if (!editingAgent) return
 
     // 验证表单
@@ -211,10 +345,10 @@ export function AgentManager() {
     }
 
     saveMutation.mutate(agentToSave)
-  }
+  }, [editingAgent, validateAgentForm, saveMutation])
 
-  // 打开创建对话框
-  const handleAddAgent = () => {
+  // 打开创建对话框 - 使用 useCallback
+  const handleAddAgent = useCallback(() => {
     setIsEditing(false)
     setEditingAgent({
       name: '',
@@ -226,42 +360,52 @@ export function AgentManager() {
     })
     setFormErrors({})
     setIsDialogOpen(true)
-  }
+  }, [modelsList])
 
-  // 打开编辑对话框
-  const handleEdit = (agent: AgentConfig) => {
+  // 打开编辑对话框 - 使用 useCallback
+  const handleEdit = useCallback((agent: AgentConfig) => {
     setIsEditing(true)
     setEditingAgent({ ...agent })
     setFormErrors({})
     setIsDialogOpen(true)
-  }
+  }, [])
 
-  // 打开删除确认对话框
-  const handleDeleteClick = (id: string) => {
+  // 打开删除确认对话框 - 使用 useCallback
+  const handleDeleteClick = useCallback((id: string) => {
     setAgentToDelete(id)
     setIsDeleteDialogOpen(true)
-  }
+  }, [])
 
-  // 确认删除
-  const handleConfirmDelete = () => {
+  // 确认删除 - 使用 useCallback
+  const handleConfirmDelete = useCallback(() => {
     if (agentToDelete) {
       deleteMutation.mutate(agentToDelete)
     }
-  }
+  }, [agentToDelete, deleteMutation])
 
-  // 更新编辑状态
-  const updateEditingAgent = (updates: Partial<AgentConfig>) => {
+  // 更新编辑状态 - 使用 useCallback
+  const updateEditingAgent = useCallback((updates: Partial<AgentConfig>) => {
     setEditingAgent((prev) => (prev ? { ...prev, ...updates } : null))
     // 清除相关错误
-    const newErrors = { ...formErrors }
-    Object.keys(updates).forEach((key) => {
-      delete newErrors[key as keyof FormErrors]
+    setFormErrors((prev) => {
+      const newErrors = { ...prev }
+      Object.keys(updates).forEach((key) => {
+        delete newErrors[key as keyof FormErrors]
+      })
+      return newErrors
     })
-    setFormErrors(newErrors)
-  }
+  }, [])
+
+  // 清除搜索 - 使用 useCallback
+  const clearSearch = useCallback(() => {
+    setSearchQuery('')
+  }, [])
 
   // 当前 Agent
   const currentAgent = agentsList.find((a) => a.id === currentAgentId)
+
+  // 判断是否使用虚拟滚动（当列表项超过20时使用）
+  const useVirtualScroll = filteredAgents.length > 20
 
   return (
     <div className="space-y-6">
@@ -282,37 +426,27 @@ export function AgentManager() {
       {/* 统计卡片 */}
       <StaggerContainer className="grid gap-4 md:grid-cols-4">
         <StaggerItem>
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">总 Agent 数</CardTitle>
-              <Bot className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.total}</div>
-            </CardContent>
-          </Card>
+          <StatCard
+            title="总 Agent 数"
+            value={stats.total}
+            icon={Bot}
+          />
         </StaggerItem>
         <StaggerItem>
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">已启用</CardTitle>
-              <CheckCircle className="h-4 w-4 text-green-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{stats.enabled}</div>
-            </CardContent>
-          </Card>
+          <StatCard
+            title="已启用"
+            value={stats.enabled}
+            icon={CheckCircle}
+            className="text-green-600"
+          />
         </StaggerItem>
         <StaggerItem>
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">已禁用</CardTitle>
-              <Bot className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-muted-foreground">{stats.disabled}</div>
-            </CardContent>
-          </Card>
+          <StatCard
+            title="已禁用"
+            value={stats.disabled}
+            icon={Bot}
+            className="text-muted-foreground"
+          />
         </StaggerItem>
         <StaggerItem>
           <Card className="hover:shadow-md transition-shadow">
@@ -374,7 +508,7 @@ export function AgentManager() {
         searchQuery ? (
           <EmptySearchState
             searchTerm={searchQuery}
-            onClear={() => setSearchQuery('')}
+            onClear={clearSearch}
           />
         ) : (
           <EmptyListState
@@ -382,7 +516,16 @@ export function AgentManager() {
             onCreate={handleAddAgent}
           />
         )
+      ) : useVirtualScroll ? (
+        // 使用虚拟滚动（大数据量）
+        <VirtualAgentList
+          agents={filteredAgents}
+          onEdit={handleEdit}
+          onDelete={handleDeleteClick}
+          viewMode={viewMode}
+        />
       ) : (
+        // 普通列表（小数据量）
         <TabsContent value={viewMode} className="mt-0">
           {viewMode === 'card' ? (
             <StaggerContainer className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

@@ -13,6 +13,8 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
+  FileText,
+  Puzzle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -32,7 +34,9 @@ const navItems = [
   { path: '/', label: '仪表盘', icon: LayoutDashboard },
   { path: '/models', label: '模型配置', icon: Brain },
   { path: '/agents', label: 'Agent 管理', icon: Bot },
+  { path: '/skills', label: '技能商店', icon: Puzzle },
   { path: '/diagnostics', label: '诊断修复', icon: Stethoscope },
+  { path: '/logs', label: '日志查看', icon: FileText },
   { path: '/update', label: '版本升级', icon: Download },
   { path: '/settings', label: '设置', icon: Settings },
 ]

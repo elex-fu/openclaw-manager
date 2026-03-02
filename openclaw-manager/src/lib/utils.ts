@@ -32,3 +32,14 @@ export function getFileIcon(fileType: string): string {
   if (['txt', 'md', 'doc', 'docx', 'pdf'].includes(type)) return 'document';
   return 'file';
 }
+
+// 重新导出性能工具
+export {
+  performanceMonitor,
+  usePerformanceTrack,
+  debounce,
+  throttle,
+  measurePerformance,
+  measurePerformanceAsync,
+} from './performance';
+

@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Switch } from '@/components/ui/switch'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Dialog,
   DialogContent,
@@ -22,53 +23,408 @@ import {
   Brain,
   Key,
   TestTube,
-  Star
+  Star,
+  GripVertical,
+  Settings2,
+  CheckCircle2,
+  XCircle,
+  Loader2,
 } from 'lucide-react'
 import { modelApi, secureStorageApi } from '@/lib/tauri-api'
 import { useConfigStore } from '@/stores/configStore'
 import { useAppStore } from '@/stores/appStore'
-import type { ModelConfig } from '@/types'
+import type { ModelConfigFull, ModelParameters, ModelCapabilities } from '@/types'
+
+// DnD Kit imports
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+
+// Sortable Model Card Component
+interface SortableModelCardProps {
+  model: ModelConfigFull
+  onEdit: (model: ModelConfigFull) => void
+  onDelete: (id: string) => void
+  onTest: (id: string) => void
+  onSetDefault: (id: string) => void
+  testStatus: { loading: boolean; result?: { success: boolean; latency: number; message?: string } }
+  isDefaultLoading: boolean
+}
+
+function SortableModelCard({
+  model,
+  onEdit,
+  onDelete,
+  onTest,
+  onSetDefault,
+  testStatus,
+  isDefaultLoading,
+}: SortableModelCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: model.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <Card className={model.default ? 'border-primary' : ''}>
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-2">
+              <div
+                {...attributes}
+                {...listeners}
+                className="cursor-grab active:cursor-grabbing p-1 hover:bg-muted rounded"
+              >
+                <GripVertical className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <CardTitle>{model.name}</CardTitle>
+              {model.default && (
+                <Badge variant="default">
+                  <Star className="mr-1 h-3 w-3" />
+                  默认
+                </Badge>
+              )}
+              {!model.enabled && <Badge variant="secondary">已禁用</Badge>}
+              <Badge variant="outline" className="text-xs">
+                优先级: {model.priority}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onTest(model.id)}
+                disabled={testStatus.loading}
+                title="测试连接"
+              >
+                {testStatus.loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : testStatus.result ? (
+                  testStatus.result.success ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <XCircle className="h-4 w-4 text-red-500" />
+                  )
+                ) : (
+                  <TestTube className="h-4 w-4" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onEdit(model)}
+                title="编辑"
+              >
+                <Edit2 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onDelete(model.id)}
+                title="删除"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <CardDescription>
+            {model.provider} · {model.model}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-4 gap-4 text-sm">
+            <div>
+              <p className="text-muted-foreground">Temperature</p>
+              <p className="font-medium">{model.parameters.temperature}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Max Tokens</p>
+              <p className="font-medium">{model.parameters.max_tokens}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Top P</p>
+              <p className="font-medium">{model.parameters.top_p}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">API Base</p>
+              <p className="font-medium truncate">{model.api_base || '默认'}</p>
+            </div>
+          </div>
+
+          {testStatus.result && (
+            <div className={`text-sm p-2 rounded ${testStatus.result.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+              {testStatus.result.success
+                ? `连接成功 - 延迟: ${testStatus.result.latency}ms`
+                : `连接失败: ${testStatus.result.message}`}
+            </div>
+          )}
+
+          {!model.default && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onSetDefault(model.id)}
+              disabled={isDefaultLoading}
+            >
+              设为默认
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// Model Parameter Form Component
+interface ModelParameterFormProps {
+  parameters: ModelParameters
+  onChange: (params: ModelParameters) => void
+}
+
+function ModelParameterForm({ parameters, onChange }: ModelParameterFormProps) {
+  const updateParam = <K extends keyof ModelParameters>(
+    key: K,
+    value: ModelParameters[K]
+  ) => {
+    onChange({ ...parameters, [key]: value })
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="temperature">
+            Temperature ({parameters.temperature})
+          </Label>
+          <Input
+            id="temperature"
+            type="range"
+            min="0"
+            max="2"
+            step="0.1"
+            value={parameters.temperature}
+            onChange={(e) => updateParam('temperature', parseFloat(e.target.value))}
+          />
+          <p className="text-xs text-muted-foreground">
+            控制输出的随机性，值越高输出越随机
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="max_tokens">Max Tokens</Label>
+          <Input
+            id="max_tokens"
+            type="number"
+            min="1"
+            max="8192"
+            value={parameters.max_tokens}
+            onChange={(e) => updateParam('max_tokens', parseInt(e.target.value) || 2048)}
+          />
+          <p className="text-xs text-muted-foreground">
+            生成文本的最大长度
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="top_p">
+            Top P ({parameters.top_p})
+          </Label>
+          <Input
+            id="top_p"
+            type="range"
+            min="0"
+            max="1"
+            step="0.1"
+            value={parameters.top_p}
+            onChange={(e) => updateParam('top_p', parseFloat(e.target.value))}
+          />
+          <p className="text-xs text-muted-foreground">
+            核采样参数，控制输出的多样性
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="presence_penalty">
+            Presence Penalty ({parameters.presence_penalty})
+          </Label>
+          <Input
+            id="presence_penalty"
+            type="range"
+            min="-2"
+            max="2"
+            step="0.1"
+            value={parameters.presence_penalty}
+            onChange={(e) => updateParam('presence_penalty', parseFloat(e.target.value))}
+          />
+          <p className="text-xs text-muted-foreground">
+            控制模型是否倾向于讨论新话题
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="frequency_penalty">
+          Frequency Penalty ({parameters.frequency_penalty})
+        </Label>
+        <Input
+          id="frequency_penalty"
+          type="range"
+          min="-2"
+          max="2"
+          step="0.1"
+          value={parameters.frequency_penalty}
+          onChange={(e) => updateParam('frequency_penalty', parseFloat(e.target.value))}
+        />
+        <p className="text-xs text-muted-foreground">
+          控制模型是否倾向于重复相同的词语
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// Model Capabilities Form Component
+interface ModelCapabilitiesFormProps {
+  capabilities: ModelCapabilities
+  onChange: (caps: ModelCapabilities) => void
+}
+
+function ModelCapabilitiesForm({ capabilities, onChange }: ModelCapabilitiesFormProps) {
+  const toggleCapability = (key: keyof ModelCapabilities) => {
+    onChange({ ...capabilities, [key]: !capabilities[key] })
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex items-center space-x-2">
+          <Switch
+            id="function_calling"
+            checked={capabilities.function_calling}
+            onCheckedChange={() => toggleCapability('function_calling')}
+          />
+          <Label htmlFor="function_calling">函数调用</Label>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <Switch
+            id="vision"
+            checked={capabilities.vision}
+            onCheckedChange={() => toggleCapability('vision')}
+          />
+          <Label htmlFor="vision">视觉输入</Label>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <Switch
+            id="streaming"
+            checked={capabilities.streaming}
+            onCheckedChange={() => toggleCapability('streaming')}
+          />
+          <Label htmlFor="streaming">流式输出</Label>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <Switch
+            id="json_mode"
+            checked={capabilities.json_mode}
+            onCheckedChange={() => toggleCapability('json_mode')}
+          />
+          <Label htmlFor="json_mode">JSON 模式</Label>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="max_context_length">最大上下文长度</Label>
+        <Input
+          id="max_context_length"
+          type="number"
+          placeholder="例如: 128000"
+          value={capabilities.max_context_length || ''}
+          onChange={(e) =>
+            onChange({
+              ...capabilities,
+              max_context_length: e.target.value ? parseInt(e.target.value) : undefined,
+            })
+          }
+        />
+      </div>
+    </div>
+  )
+}
 
 export function ModelConfigPage() {
   const queryClient = useQueryClient()
   const { addNotification } = useAppStore()
   const { setDefaultModel } = useConfigStore()
-  
-  const [editingModel, setEditingModel] = useState<ModelConfig | null>(null)
+
+  const [editingModel, setEditingModel] = useState<ModelConfigFull | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [apiKeyInput, setApiKeyInput] = useState('')
+  const [testStatus, setTestStatus] = useState<Record<string, { loading: boolean; result?: { success: boolean; latency: number; message?: string } }>>({})
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
 
   // 查询所有模型
   const { data: modelsData, isLoading } = useQuery({
-    queryKey: ['models'],
-    queryFn: () => modelApi.getAllModels(),
+    queryKey: ['models-full'],
+    queryFn: () => modelApi.getAllModelsFull(),
   })
 
   const models = modelsData?.data || []
 
   // 保存模型
   const saveMutation = useMutation({
-    mutationFn: modelApi.saveModel,
+    mutationFn: modelApi.saveModelFull,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['models'] })
+      queryClient.invalidateQueries({ queryKey: ['models-full'] })
       setIsDialogOpen(false)
       setEditingModel(null)
       setApiKeyInput('')
       addNotification({
-        
         title: '保存成功',
         message: '模型配置已保存',
         type: 'success',
-        
       })
     },
     onError: (error) => {
       addNotification({
-        
         title: '保存失败',
         message: String(error),
         type: 'error',
-        
       })
     },
   })
@@ -77,65 +433,102 @@ export function ModelConfigPage() {
   const deleteMutation = useMutation({
     mutationFn: modelApi.deleteModel,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['models'] })
+      queryClient.invalidateQueries({ queryKey: ['models-full'] })
       addNotification({
-        
         title: '删除成功',
         message: '模型已删除',
         type: 'success',
-        
       })
     },
   })
 
   // 测试连接
-  const testMutation = useMutation({
-    mutationFn: modelApi.testModelConnection,
-    onSuccess: (result) => {
+  const handleTestConnection = async (modelId: string) => {
+    setTestStatus((prev) => ({ ...prev, [modelId]: { loading: true } }))
+    try {
+      const result = await modelApi.testModelConnection(modelId)
+      setTestStatus((prev) => ({
+        ...prev,
+        [modelId]: { loading: false, result: result.data || undefined },
+      }))
       if (result.data?.success) {
         addNotification({
-          
           title: '连接成功',
           message: `延迟: ${result.data.latency}ms`,
           type: 'success',
-          
         })
       } else {
         addNotification({
-          
           title: '连接失败',
           message: result.data?.message || '未知错误',
           type: 'error',
-          
         })
       }
-    },
-  })
+    } catch (error) {
+      setTestStatus((prev) => ({
+        ...prev,
+        [modelId]: { loading: false },
+      }))
+      addNotification({
+        title: '连接失败',
+        message: String(error),
+        type: 'error',
+      })
+    }
+  }
 
   // 设置默认模型
   const setDefaultMutation = useMutation({
     mutationFn: modelApi.setDefaultModel,
     onSuccess: (_, modelId) => {
       setDefaultModel(modelId)
-      queryClient.invalidateQueries({ queryKey: ['models'] })
+      queryClient.invalidateQueries({ queryKey: ['models-full'] })
       addNotification({
-        
         title: '设置成功',
         message: '默认模型已更新',
         type: 'success',
-        
       })
     },
   })
 
+  // 拖拽排序
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const oldIndex = models.findIndex((m) => m.id === active.id)
+    const newIndex = models.findIndex((m: ModelConfigFull) => m.id === over.id)
+
+    const newModels = arrayMove(models, oldIndex, newIndex)
+
+    // 更新优先级
+    const modelOrders = newModels.map((m, index) => ({ id: m.id, priority: index }))
+
+    try {
+      await modelApi.reorderModels(newModels.map(m => m.id))
+      queryClient.invalidateQueries({ queryKey: ['models-full'] })
+      addNotification({
+        title: '排序已更新',
+        message: '模型优先级已更新',
+        type: 'success',
+      })
+    } catch (error) {
+      addNotification({
+        title: '排序更新失败',
+        message: String(error),
+        type: 'error',
+      })
+    }
+  }
+
   const handleSave = async () => {
     if (!editingModel) return
-    
+
     // 保存 API Key 到安全存储
     if (apiKeyInput) {
       await secureStorageApi.saveApiKey(editingModel.provider, apiKeyInput)
     }
-    
+
     // 保存模型配置
     saveMutation.mutate(editingModel)
   }
@@ -146,19 +539,33 @@ export function ModelConfigPage() {
       name: '',
       provider: 'openai',
       model: 'gpt-4',
-      temperature: 0.7,
-      max_tokens: 4096,
+      api_base: '',
+      priority: models.length,
+      parameters: {
+        temperature: 1.0,
+        max_tokens: 2048,
+        top_p: 1.0,
+        presence_penalty: 0.0,
+        frequency_penalty: 0.0,
+      },
+      capabilities: {
+        function_calling: false,
+        vision: false,
+        streaming: true,
+        json_mode: false,
+      },
       enabled: true,
+      default: false,
     })
     setApiKeyInput('')
     setIsDialogOpen(true)
   }
 
-  const handleEdit = async (model: ModelConfig) => {
+  const handleEdit = async (model: ModelConfigFull) => {
     setEditingModel({ ...model })
     // 获取已保存的 API Key
     const keyResult = await secureStorageApi.getApiKey(model.provider)
-    setApiKeyInput(keyResult.data || '')
+    setApiKeyInput(keyResult || '')
     setIsDialogOpen(true)
   }
 
@@ -178,7 +585,7 @@ export function ModelConfigPage() {
       <Alert>
         <Key className="h-4 w-4" />
         <AlertDescription>
-          API Key 将安全存储在系统密钥链中，不会保存在配置文件里。
+          API Key 将安全存储在系统密钥链中，不会保存在配置文件里。拖拽卡片可调整模型优先级。
         </AlertDescription>
       </Alert>
 
@@ -197,85 +604,37 @@ export function ModelConfigPage() {
             </CardContent>
           </Card>
         ) : (
-          models.map((model) => (
-            <Card key={model.id} className={model.isDefault ? 'border-primary' : ''}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <CardTitle>{model.name}</CardTitle>
-                    {model.isDefault && (
-                      <Badge variant="default">
-                        <Star className="mr-1 h-3 w-3" />
-                        默认
-                      </Badge>
-                    )}
-                    {!model.enabled && <Badge variant="secondary">已禁用</Badge>}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => testMutation.mutate(model.id)}
-                      disabled={testMutation.isPending}
-                    >
-                      <TestTube className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleEdit(model)}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteMutation.mutate(model.id)}
-                      disabled={deleteMutation.isPending}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                <CardDescription>
-                  {model.provider} · {model.model}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Temperature</p>
-                    <p className="font-medium">{model.temperature}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Max Tokens</p>
-                    <p className="font-medium">{model.max_tokens || '无限制'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">API Base</p>
-                    <p className="font-medium truncate">{model.api_base || '默认'}</p>
-                  </div>
-                </div>
-
-                {!model.isDefault && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDefaultMutation.mutate(model.id)}
-                    disabled={setDefaultMutation.isPending}
-                  >
-                    设为默认
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          ))
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={models.map((m: ModelConfigFull) => m.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="grid gap-4">
+                {models.map((model: ModelConfigFull) => (
+                  <SortableModelCard
+                    key={model.id}
+                    model={model}
+                    onEdit={handleEdit}
+                    onDelete={(id) => deleteMutation.mutate(id)}
+                    onTest={handleTestConnection}
+                    onSetDefault={(id) => setDefaultMutation.mutate(id)}
+                    testStatus={testStatus[model.id] || { loading: false }}
+                    isDefaultLoading={setDefaultMutation.isPending}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
       </div>
 
       {/* 编辑/添加模型对话框 */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingModel?.id ? '编辑模型' : '添加模型'}</DialogTitle>
             <DialogDescription>
@@ -284,102 +643,116 @@ export function ModelConfigPage() {
           </DialogHeader>
 
           {editingModel && (
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
+            <Tabs defaultValue="basic" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="basic">基本信息</TabsTrigger>
+                <TabsTrigger value="parameters">
+                  <Settings2 className="mr-2 h-4 w-4" />
+                  高级参数
+                </TabsTrigger>
+                <TabsTrigger value="capabilities">能力配置</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="basic" className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">名称</Label>
+                    <Input
+                      id="name"
+                      value={editingModel.name}
+                      onChange={(e) =>
+                        setEditingModel({ ...editingModel, name: e.target.value })
+                      }
+                      placeholder="例如: GPT-4"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="provider">提供商</Label>
+                    <select
+                      id="provider"
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                      value={editingModel.provider}
+                      onChange={(e) =>
+                        setEditingModel({ ...editingModel, provider: e.target.value })
+                      }
+                    >
+                      <option value="openai">OpenAI</option>
+                      <option value="anthropic">Anthropic</option>
+                      <option value="google">Google</option>
+                      <option value="azure">Azure OpenAI</option>
+                      <option value="local">本地模型</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="name">名称</Label>
+                  <Label htmlFor="model">模型 ID</Label>
                   <Input
-                    id="name"
-                    value={editingModel.name}
-                    onChange={(e) => setEditingModel({ ...editingModel, name: e.target.value })}
-                    placeholder="例如: GPT-4"
+                    id="model"
+                    value={editingModel.model}
+                    onChange={(e) =>
+                      setEditingModel({ ...editingModel, model: e.target.value })
+                    }
+                    placeholder="例如: gpt-4, claude-3-opus-20240229"
                   />
                 </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="provider">提供商</Label>
-                  <select
-                    id="provider"
-                    className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                    value={editingModel.provider}
-                    onChange={(e) => setEditingModel({ ...editingModel, provider: e.target.value })}
-                  >
-                    <option value="openai">OpenAI</option>
-                    <option value="anthropic">Anthropic</option>
-                    <option value="google">Google</option>
-                    <option value="azure">Azure OpenAI</option>
-                    <option value="local">本地模型</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="model">模型 ID</Label>
-                <Input
-                  id="model"
-                  value={editingModel.model}
-                  onChange={(e) => setEditingModel({ ...editingModel, model: e.target.value })}
-                  placeholder="例如: gpt-4, claude-3-opus-20240229"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="apiKey">API Key</Label>
-                <Input
-                  id="apiKey"
-                  type="password"
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder="输入 API Key（将安全存储）"
-                />
-                <p className="text-xs text-muted-foreground">
-                  API Key 将存储在系统密钥链中，不会保存在配置文件
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="apiBase">API Base URL（可选）</Label>
-                <Input
-                  id="apiBase"
-                  value={editingModel.api_base || ''}
-                  onChange={(e) => setEditingModel({ ...editingModel, api_base: e.target.value })}
-                  placeholder="例如: https://api.openai.com/v1"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="temperature">Temperature ({editingModel.temperature})</Label>
+                  <Label htmlFor="apiKey">API Key</Label>
                   <Input
-                    id="temperature"
-                    type="range"
-                    min="0"
-                    max="2"
-                    step="0.1"
-                    value={editingModel.temperature}
-                    onChange={(e) => setEditingModel({ ...editingModel, temperature: parseFloat(e.target.value) })}
+                    id="apiKey"
+                    type="password"
+                    value={apiKeyInput}
+                    onChange={(e) => setApiKeyInput(e.target.value)}
+                    placeholder="输入 API Key（将安全存储）"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    API Key 将存储在系统密钥链中，不会保存在配置文件
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="apiBase">API Base URL（可选）</Label>
+                  <Input
+                    id="apiBase"
+                    value={editingModel.api_base || ''}
+                    onChange={(e) =>
+                      setEditingModel({ ...editingModel, api_base: e.target.value })
+                    }
+                    placeholder="例如: https://api.openai.com/v1"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="maxTokens">Max Tokens</Label>
-                  <Input
-                    id="maxTokens"
-                    type="number"
-                    value={editingModel.max_tokens || ''}
-                    onChange={(e) => setEditingModel({ ...editingModel, max_tokens: e.target.value ? parseInt(e.target.value) : undefined })}
-                    placeholder="4096"
-                  />
-                </div>
-              </div>
 
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="enabled"
-                  checked={editingModel.enabled}
-                  onCheckedChange={(checked: boolean) => setEditingModel({ ...editingModel, enabled: checked })}
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="enabled"
+                    checked={editingModel.enabled}
+                    onCheckedChange={(checked: boolean) =>
+                      setEditingModel({ ...editingModel, enabled: checked })
+                    }
+                  />
+                  <Label htmlFor="enabled">启用此模型</Label>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="parameters" className="py-4">
+                <ModelParameterForm
+                  parameters={editingModel.parameters}
+                  onChange={(params) =>
+                    setEditingModel({ ...editingModel, parameters: params })
+                  }
                 />
-                <Label htmlFor="enabled">启用此模型</Label>
-              </div>
-            </div>
+              </TabsContent>
+
+              <TabsContent value="capabilities" className="py-4">
+                <ModelCapabilitiesForm
+                  capabilities={editingModel.capabilities}
+                  onChange={(caps) =>
+                    setEditingModel({ ...editingModel, capabilities: caps })
+                  }
+                />
+              </TabsContent>
+            </Tabs>
           )}
 
           <DialogFooter>

@@ -1,5 +1,9 @@
 pub mod config;
+pub mod log;
+pub mod model;
 pub mod openclaw;
 pub mod plugin;
 pub mod secure;
 pub mod service;
+pub mod skill;
+pub mod system;
