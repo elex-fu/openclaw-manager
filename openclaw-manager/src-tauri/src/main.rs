@@ -1,16 +1,31 @@
+// OpenClaw Manager
+// Copyright (c) 2024 OpenClaw Team
+// Licensed under the MIT License
+//
+// A cross-platform desktop application for managing OpenClaw AI gateway.
+// Features one-click installation, visual configuration management,
+// real-time log viewing, and system diagnostics.
+
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use openclaw_manager::commands::openclaw::InstallerState;
+use openclaw_manager::commands::plugin::PluginManagerState;
+use openclaw_manager::commands::skill::SkillState;
 use openclaw_manager::installer::OpenClawInstaller;
 use openclaw_manager::models::openclaw::InstallStatus;
+use openclaw_manager::services::config_manager::ConfigManager;
 use openclaw_manager::services::installer::InstallerService;
+use openclaw_manager::services::log_service::LogServiceState;
+use openclaw_manager::services::log_watcher::LogWatcherState;
 use std::sync::Arc;
 use tauri::{Manager, App, Emitter};
 use tokio::sync::Mutex;
 
 // Bring modules into scope for invoke_handler and auto_initialize
 use openclaw_manager::{commands, system, installer, services};
+use openclaw_manager::services::plugin_manager::PluginManager;
+use openclaw_manager::services::plugin_market::MarketClient;
 
 /// 自动初始化 OpenClaw
 /// 在应用启动时后台检查并自动解压
@@ -137,6 +152,38 @@ fn main() {
                 service: Arc::new(Mutex::new(service)),
             });
 
+            // 初始化配置管理器
+            let config_manager = ConfigManager::new()
+                .map(Arc::new)
+                .unwrap_or_else(|e| {
+                    log::warn!("配置管理器初始化失败: {}, 使用默认配置", e);
+                    Arc::new(ConfigManager::default())
+                });
+            app.manage(config_manager);
+
+            // 初始化日志服务状态
+            app.manage(LogServiceState::new());
+            app.manage(LogWatcherState::new());
+
+            // 初始化插件管理器
+            let plugin_manager_state = tauri::async_runtime::block_on(async {
+                match PluginManagerState::new().await {
+                    Ok(state) => state,
+                    Err(e) => {
+                        log::warn!("插件管理器初始化失败: {}, 使用默认配置", e);
+                        PluginManagerState {
+                            manager: PluginManager::default(),
+                            market_client: MarketClient::new(),
+                        }
+                    }
+                }
+            });
+            app.manage(plugin_manager_state);
+
+            // 初始化技能状态
+            let skill_state = SkillState::new();
+            app.manage(skill_state);
+
             // 后台自动初始化检查
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -161,6 +208,15 @@ fn main() {
             commands::plugin::uninstall_plugin,
             commands::plugin::enable_plugin,
             commands::plugin::disable_plugin,
+            commands::plugin::get_plugin_config,
+            commands::plugin::update_plugin_config,
+            commands::plugin::search_market_plugins,
+            commands::plugin::get_market_plugin_details,
+            commands::plugin::get_plugin_categories,
+            commands::plugin::get_popular_plugins,
+            commands::plugin::get_latest_plugins,
+            commands::plugin::check_plugin_installed,
+            commands::plugin::get_enabled_plugins,
             commands::openclaw::check_openclaw_installation,
             commands::openclaw::install_openclaw,
             commands::openclaw::install_openclaw_one_click,
@@ -197,7 +253,43 @@ fn main() {
             commands::service::run_diagnostics,
             commands::service::auto_fix_issues,
             commands::service::fix_issue,
+            commands::model::test_model_connection,
+            commands::model::update_model_priority,
+            commands::model::get_all_models_full,
+            commands::model::save_model_full,
+            commands::log::get_log_sources,
+            commands::log::get_recent_logs,
+            commands::log::subscribe_logs,
+            commands::log::unsubscribe_logs,
+            commands::log::export_logs,
+            commands::log::add_log_source,
+            commands::log::remove_log_source,
+            commands::log::init_default_log_sources,
+            commands::log::clear_log_display,
+            commands::log::get_log_stats,
+            commands::skill::get_skills,
+            commands::skill::get_skill,
+            commands::skill::search_installed_skills,
+            commands::skill::install_skill,
+            commands::skill::uninstall_skill,
+            commands::skill::enable_skill,
+            commands::skill::disable_skill,
+            commands::skill::toggle_skill,
+            commands::skill::get_skill_config,
+            commands::skill::update_skill_config,
+            commands::skill::update_skill,
+            commands::skill::check_skill_updates,
+            commands::skill::search_skills,
+            commands::skill::get_market_skill_detail,
+            commands::skill::get_popular_skills,
+            commands::skill::get_latest_skills,
+            commands::skill::get_skill_categories,
+            commands::skill::check_single_skill_update,
             system::get_system_info,
+            commands::system::get_system_resources,
+            commands::system::get_cpu_history,
+            commands::system::get_recent_activities,
+            commands::system::get_diagnostic_alerts,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

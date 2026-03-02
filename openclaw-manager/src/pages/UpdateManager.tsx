@@ -80,15 +80,11 @@ export function UpdateManager() {
     setError(null);
     try {
       const response = await updateApi.checkForUpdates();
-      if (response.success && response.data) {
-        setUpdateState(response.data);
-        if (response.data.hasUpdate) {
-          setSuccessMessage(`发现新版本: ${response.data.latestVersion}`);
-        } else {
-          setSuccessMessage('已是最新版本');
-        }
+      setUpdateState(response);
+      if (response.hasUpdate) {
+        setSuccessMessage(`发现新版本: ${response.latestVersion}`);
       } else {
-        setError(response.error || '检查更新失败');
+        setSuccessMessage('已是最新版本');
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '检查更新时出错');
@@ -109,18 +105,14 @@ export function UpdateManager() {
         setProgress(p);
       });
 
-      const response = await updateApi.performUpdate(updateInfo);
+      await updateApi.performUpdate(updateInfo);
 
       // 清理监听器
       unlisten();
 
-      if (response.success) {
-        setSuccessMessage('升级成功完成！');
-        // 重新检查更新状态
-        await checkForUpdates();
-      } else {
-        setError(response.error || '升级失败');
-      }
+      setSuccessMessage('升级成功完成！');
+      // 重新检查更新状态
+      await checkForUpdates();
     } catch (e) {
       setError(e instanceof Error ? e.message : '升级时出错');
     } finally {
@@ -156,16 +148,12 @@ export function UpdateManager() {
           setProgress(p);
         });
 
-        const response = await updateApi.performOfflineUpdate(selected);
+        await updateApi.performOfflineUpdate(selected);
 
         unlisten();
 
-        if (response.success) {
-          setSuccessMessage('离线升级成功完成！');
-          await checkForUpdates();
-        } else {
-          setError(response.error || '离线升级失败');
-        }
+        setSuccessMessage('离线升级成功完成！');
+        await checkForUpdates();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '离线升级时出错');
@@ -179,9 +167,7 @@ export function UpdateManager() {
   const loadBackups = useCallback(async () => {
     try {
       const response = await updateApi.getBackupList();
-      if (response.success && response.data) {
-        setBackups(response.data);
-      }
+      setBackups(response);
     } catch (e) {
       console.error('加载备份列表失败:', e);
     }
@@ -197,7 +183,7 @@ export function UpdateManager() {
     setError(null);
 
     try {
-      const response = await updateApi.restoreFromBackup(backupPath);
+      await updateApi.restoreFromBackup(backupPath);
       if (response.success) {
         setSuccessMessage('从备份恢复成功！');
         await checkForUpdates();

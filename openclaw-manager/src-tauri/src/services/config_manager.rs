@@ -5,6 +5,7 @@
 #![allow(dead_code)]
 
 use crate::errors::{AppError, ConfigError};
+use crate::models::config::ModelConfigFull;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -23,6 +24,8 @@ pub struct ConfigState {
     pub app: AppConfig,
     /// 模型配置
     pub models: Vec<ModelConfig>,
+    /// 完整模型配置（包含高级参数）
+    pub models_full: Vec<ModelConfigFull>,
     /// 服务配置
     pub services: HashMap<String, ServiceConfig>,
 }
@@ -104,6 +107,7 @@ impl Default for ConfigState {
             last_updated: current_timestamp(),
             app: AppConfig::default(),
             models: vec![ModelConfig::default()],
+            models_full: vec![ModelConfigFull::default()],
             services: {
                 let mut map = HashMap::new();
                 map.insert("gateway".to_string(), ServiceConfig::default());
@@ -158,6 +162,20 @@ pub struct ConfigManager {
     state: Arc<RwLock<ConfigState>>,
     config_path: PathBuf,
     settings_path: PathBuf,
+}
+
+impl Default for ConfigManager {
+    fn default() -> Self {
+        let config_dir = dirs::config_dir()
+            .map(|p| p.join("openclaw-manager"))
+            .unwrap_or_else(|| PathBuf::from("./config"));
+
+        Self {
+            state: Arc::new(RwLock::new(ConfigState::default())),
+            config_path: config_dir.join("config.yaml"),
+            settings_path: config_dir.join("settings.yaml"),
+        }
+    }
 }
 
 impl ConfigManager {
@@ -502,6 +520,71 @@ impl ConfigManager {
         let state = self.state.read().await;
         state.models.iter().find(|m| m.default).cloned()
             .or_else(|| state.models.first().cloned())
+    }
+
+    // ========== 新增方法：完整模型配置支持 ==========
+
+    /// 获取所有模型（完整配置）
+    pub async fn get_models_full(&self) -> Result<Vec<ModelConfigFull>, AppError> {
+        let state = self.state.read().await;
+        Ok(state.models_full.clone())
+    }
+
+    /// 保存模型配置（完整版）
+    pub async fn save_model_full(&self, model: ModelConfigFull) -> Result<(), AppError> {
+        self.update_partial(|state| {
+            // 如果设置为默认，取消其他默认
+            if model.default {
+                for m in &mut state.models_full {
+                    m.default = false;
+                }
+            }
+
+            // 更新或添加模型
+            if let Some(index) = state.models_full.iter().position(|m| m.id == model.id) {
+                state.models_full[index] = model;
+            } else {
+                state.models_full.push(model);
+            }
+
+            // 同步更新简化版模型列表
+            Self::sync_models_list(state);
+        }).await
+    }
+
+    /// 更新模型优先级（批量）
+    pub async fn update_model_priorities(
+        &self,
+        model_orders: Vec<(String, i32)>,
+    ) -> Result<(), AppError> {
+        self.update_partial(|state| {
+            for (model_id, priority) in model_orders {
+                if let Some(model) = state.models_full.iter_mut().find(|m| m.id == model_id) {
+                    model.priority = priority;
+                }
+            }
+
+            // 按优先级排序
+            state.models_full.sort_by_key(|m| m.priority);
+
+            // 同步更新简化版模型列表
+            Self::sync_models_list(state);
+        }).await
+    }
+
+    /// 同步简化版模型列表
+    fn sync_models_list(state: &mut ConfigState) {
+        state.models = state.models_full.iter().map(|m| ModelConfig {
+            id: m.id.clone(),
+            name: m.name.clone(),
+            provider: m.provider.clone(),
+            api_base: m.api_base.clone(),
+            model: m.model.clone(),
+            temperature: m.parameters.temperature,
+            max_tokens: Some(m.parameters.max_tokens),
+            enabled: m.enabled,
+            default: m.default,
+        }).collect();
     }
 }
 

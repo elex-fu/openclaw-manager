@@ -137,6 +137,47 @@ export interface RuntimeModelConfig extends ModelConfig {
   apiKey?: string;
 }
 
+// 模型参数配置
+export interface ModelParameters {
+  temperature: number;      // 0-2，默认1
+  max_tokens: number;       // 1-8192，默认2048
+  top_p: number;           // 0-1，默认1
+  presence_penalty: number; // -2到2，默认0
+  frequency_penalty: number; // -2到2，默认0
+}
+
+// 模型能力
+export interface ModelCapabilities {
+  function_calling: boolean;
+  vision: boolean;
+  streaming: boolean;
+  json_mode: boolean;
+  max_context_length?: number;
+  custom?: Record<string, boolean>;
+}
+
+// 完整模型配置（包含高级参数）
+export interface ModelConfigFull {
+  id: string;
+  name: string;
+  provider: string;
+  api_base?: string;
+  model: string;
+  priority: number;
+  parameters: ModelParameters;
+  capabilities: ModelCapabilities;
+  enabled: boolean;
+  default: boolean;
+}
+
+// 连接测试结果
+export interface ConnectionTestResult {
+  success: boolean;
+  latency: number;
+  message?: string;
+  model_info?: string;
+}
+
 // Agent 配置
 export interface AgentConfig {
   id: string;
@@ -270,4 +311,166 @@ export interface Plugin {
   default_config?: string;
   created_at: string;
   updated_at: string;
+}
+
+// 市场插件信息
+export interface MarketPlugin {
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  author?: string;
+  author_avatar?: string;
+  downloads: number;
+  rating: number;
+  rating_count: number;
+  icon_url?: string;
+  download_url: string;
+  categories: string[];
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+  size_bytes: number;
+  min_app_version?: string;
+  changelog?: string;
+}
+
+// 插件分类
+export interface PluginCategory {
+  id: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  plugin_count: number;
+}
+
+// 插件搜索结果
+export interface SearchPluginsResult {
+  plugins: MarketPlugin[];
+  total: number;
+  page: number;
+  per_page: number;
+  has_more: boolean;
+}
+
+// ==================== Log Types ====================
+
+export type LogLevel = 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'TRACE';
+
+export interface LogEntry {
+  id: string;
+  timestamp: number;
+  level: LogLevel;
+  source: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface LogFilter {
+  levels: LogLevel[];
+  searchQuery?: string;
+  sources?: string[];
+  startTime?: number;
+  endTime?: number;
+}
+
+export interface LogSourceInfo {
+  id: string;
+  name: string;
+  path: string;
+  size: number;
+  modified: number;
+}
+
+export interface LogStats {
+  total_size: number;
+  source_count: number;
+  sources: Array<{
+    source: string;
+    size: number;
+    path: string;
+  }>;
+}
+
+// ==================== Skill Types ====================
+
+export type HookType = 'pre_process' | 'post_process' | 'command' | 'event' | 'tool';
+
+export interface SkillHook {
+  hook_type: HookType;
+  trigger: string;
+  handler: string;
+  description?: string;
+  priority: number;
+}
+
+export interface Skill {
+  id: string;
+  name: string;
+  description: string;
+  author: string;
+  version: string;
+  categories: string[];
+  tags: string[];
+  icon_url?: string;
+  rating: number;
+  downloads: number;
+  hooks: SkillHook[];
+  config_schema?: Record<string, unknown>;
+  default_config?: Record<string, unknown>;
+  dependencies: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InstalledSkill extends Skill {
+  is_enabled: boolean;
+  config: Record<string, unknown>;
+  installed_at: string;
+  updated_at: string;
+  has_update: boolean;
+  latest_version?: string;
+}
+
+export interface SkillCategory {
+  id: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  sort_order: number;
+}
+
+export interface SkillSearchResult {
+  skills: Skill[];
+  total: number;
+  page: number;
+  per_page: number;
+  query?: string;
+  category?: string;
+}
+
+export interface SkillMarketItem {
+  id: string;
+  name: string;
+  description: string;
+  author: string;
+  version: string;
+  categories: string[];
+  tags: string[];
+  icon_url?: string;
+  rating: number;
+  downloads: number;
+  download_url: string;
+  is_installed: boolean;
+  has_update: boolean;
+}
+
+export interface ToggleSkillRequest {
+  skill_id: string;
+  enabled: boolean;
+}
+
+export interface UpdateSkillConfigRequest {
+  skill_id: string;
+  config: Record<string, unknown>;
 }

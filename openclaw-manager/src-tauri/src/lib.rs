@@ -1,3 +1,7 @@
+// OpenClaw Manager - Core Library
+// Copyright (c) 2024 OpenClaw Team
+// Licensed under the MIT License
+
 // 允许未使用的代码
 #![allow(dead_code)]
 

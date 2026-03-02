@@ -19,6 +19,7 @@ import { useAppStore } from '@/stores/appStore'
 import { useConfigStore } from '@/stores/configStore'
 import { useInstallStore } from '@/stores/installStore'
 import { ServiceStatus } from '@/components/openclaw/ServiceStatus'
+import { ResourceMonitor, ActivityLog, DiagnosticAlerts } from '@/components/dashboard'
 import { StaggerContainer, StaggerItem, ScaleIn } from '@/components/animation'
 import type { InstallStage } from '@/types'
 
@@ -309,8 +310,21 @@ export function Dashboard() {
         </StaggerItem>
       </StaggerContainer>
 
-      {/* 系统信息 */}
+      {/* 资源监控和诊断警告 */}
+      <ScaleIn delay={0.2}>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <ResourceMonitor />
+          <DiagnosticAlerts />
+        </div>
+      </ScaleIn>
+
+      {/* 活动日志 */}
       <ScaleIn delay={0.3}>
+        <ActivityLog />
+      </ScaleIn>
+
+      {/* 系统信息 */}
+      <ScaleIn delay={0.4}>
         <Card>
           <CardHeader>
             <CardTitle>系统信息</CardTitle>

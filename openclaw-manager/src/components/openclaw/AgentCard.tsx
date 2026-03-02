@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, memo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { agentApi } from '@/lib/tauri-api';
 import { useConfigStore, useAppStore } from '@/stores';
@@ -36,7 +36,8 @@ interface AgentCardProps {
   viewMode?: 'card' | 'list';
 }
 
-export function AgentCard({ agent, onEdit, onDelete, viewMode = 'card' }: AgentCardProps) {
+// 使用 memo 优化 AgentCard 组件
+export const AgentCard = memo(function AgentCard({ agent, onEdit, onDelete, viewMode = 'card' }: AgentCardProps) {
   const queryClient = useQueryClient();
   const { addNotification } = useAppStore();
   const { currentAgentId, setCurrentAgent } = useConfigStore();
@@ -45,7 +46,7 @@ export function AgentCard({ agent, onEdit, onDelete, viewMode = 'card' }: AgentC
 
   const isCurrent = currentAgentId === agent.id;
 
-  // 启用/禁用 Agent
+  // 启用/禁用 Agent - 使用 useCallback
   const enableMutation = useMutation({
     mutationFn: async (value: boolean) => {
       const result = await agentApi.saveAgent({ ...agent, enabled: value });
@@ -72,7 +73,7 @@ export function AgentCard({ agent, onEdit, onDelete, viewMode = 'card' }: AgentC
     },
   });
 
-  // 切换当前 Agent
+  // 切换当前 Agent - 使用 useCallback
   const switchMutation = useMutation({
     mutationFn: () => agentApi.setCurrentAgent(agent.id),
     onSuccess: () => {
@@ -93,13 +94,29 @@ export function AgentCard({ agent, onEdit, onDelete, viewMode = 'card' }: AgentC
     },
   });
 
-  const handleEnableChange = (checked: boolean) => {
+  const handleEnableChange = useCallback((checked: boolean) => {
     setEnabled(checked);
     enableMutation.mutate(checked);
-  };
+  }, [enableMutation]);
 
-  // 格式化日期
-  const formatDate = (dateStr: string) => {
+  const handleSwitch = useCallback(() => {
+    switchMutation.mutate();
+  }, [switchMutation]);
+
+  const handleEdit = useCallback(() => {
+    onEdit?.(agent);
+  }, [onEdit, agent]);
+
+  const handleDelete = useCallback(() => {
+    onDelete?.(agent.id);
+  }, [onDelete, agent.id]);
+
+  const handleExpand = useCallback(() => {
+    setIsExpanded(prev => !prev);
+  }, []);
+
+  // 格式化日期 - 使用 useCallback
+  const formatDate = useCallback((dateStr: string) => {
     try {
       const date = new Date(dateStr);
       return date.toLocaleDateString('zh-CN', {
@@ -110,7 +127,7 @@ export function AgentCard({ agent, onEdit, onDelete, viewMode = 'card' }: AgentC
     } catch {
       return dateStr;
     }
-  };
+  }, []);
 
   // 列表视图
   if (viewMode === 'list') {
@@ -191,7 +208,7 @@ export function AgentCard({ agent, onEdit, onDelete, viewMode = 'card' }: AgentC
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => switchMutation.mutate()}
+                    onClick={handleSwitch}
                     disabled={switchMutation.isPending}
                   >
                     {switchMutation.isPending ? (
@@ -208,7 +225,7 @@ export function AgentCard({ agent, onEdit, onDelete, viewMode = 'card' }: AgentC
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8"
-                    onClick={() => onEdit(agent)}
+                    onClick={handleEdit}
                   >
                     <Edit2 className="h-4 w-4" />
                   </Button>
@@ -219,7 +236,7 @@ export function AgentCard({ agent, onEdit, onDelete, viewMode = 'card' }: AgentC
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 text-destructive hover:text-destructive"
-                    onClick={() => onDelete(agent.id)}
+                    onClick={handleDelete}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -417,7 +434,7 @@ export function AgentCard({ agent, onEdit, onDelete, viewMode = 'card' }: AgentC
                 variant="default"
                 size="sm"
                 className="flex-1"
-                onClick={() => switchMutation.mutate()}
+                onClick={handleSwitch}
                 disabled={switchMutation.isPending}
               >
                 {switchMutation.isPending ? (
@@ -434,7 +451,7 @@ export function AgentCard({ agent, onEdit, onDelete, viewMode = 'card' }: AgentC
                 variant="outline"
                 size="sm"
                 className="flex-1"
-                onClick={() => onEdit(agent)}
+                onClick={handleEdit}
               >
                 <Edit2 className="h-4 w-4 mr-2" />
                 编辑
@@ -446,7 +463,7 @@ export function AgentCard({ agent, onEdit, onDelete, viewMode = 'card' }: AgentC
                 variant="outline"
                 size="sm"
                 className="flex-1 text-destructive hover:text-destructive"
-                onClick={() => onDelete(agent.id)}
+                onClick={handleDelete}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 删除
@@ -457,4 +474,4 @@ export function AgentCard({ agent, onEdit, onDelete, viewMode = 'card' }: AgentC
       </Card>
     </Collapsible>
   );
-}
+});

@@ -1,6 +1,7 @@
 pub mod config;
 pub mod openclaw;
 pub mod plugin;
+pub mod skill;
 
 use serde::{Deserialize, Serialize};
 

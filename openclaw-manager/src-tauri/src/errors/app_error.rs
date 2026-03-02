@@ -35,6 +35,18 @@ pub enum AppError {
     #[error("Serialization error: {0}")]
     Serialization(String),
 
+    /// 验证错误
+    #[error("Validation error: {0}")]
+    Validation(String),
+
+    /// 资源未找到
+    #[error("Not found: {0}")]
+    NotFound(String),
+
+    /// 内部错误
+    #[error("Internal error: {0}")]
+    Internal(String),
+
     /// 未知错误
     #[error("Unknown error: {0}")]
     Unknown(String),
@@ -325,6 +337,27 @@ impl AppError {
                 action: Some("检查数据格式".to_string()),
                 severity: ErrorSeverity::Warning,
                 retryable: false,
+            },
+            AppError::Validation(e) => UserErrorMessage {
+                title: "输入验证失败".to_string(),
+                description: e.clone(),
+                action: Some("请检查输入数据格式".to_string()),
+                severity: ErrorSeverity::Warning,
+                retryable: false,
+            },
+            AppError::NotFound(e) => UserErrorMessage {
+                title: "资源未找到".to_string(),
+                description: e.clone(),
+                action: Some("请确认资源ID是否正确".to_string()),
+                severity: ErrorSeverity::Warning,
+                retryable: false,
+            },
+            AppError::Internal(e) => UserErrorMessage {
+                title: "内部错误".to_string(),
+                description: e.clone(),
+                action: Some("请稍后重试".to_string()),
+                severity: ErrorSeverity::Error,
+                retryable: true,
             },
             AppError::Unknown(e) => UserErrorMessage {
                 title: "操作失败".to_string(),
