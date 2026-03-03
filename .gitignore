@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+*/node_modules/
 .pnp
 .pnp.js
 
@@ -7,12 +8,16 @@ node_modules/
 dist/
 dist-ssr/
 *.local
+.vite/
+*/.vite/
 
 # Rust
-src-tauri/target/
+target/
+*/target/
 *.rs.bk
 Cargo.lock
 !src-tauri/Cargo.lock
+!*/src-tauri/Cargo.lock
 
 # Bundled binaries (large files)
 *.tar.gz
@@ -24,10 +29,18 @@ src-tauri/bundled/runtimes/*.tar.gz
 
 # IDE
 .idea/
+*/.idea/
 .vscode/
+*/.vscode/
 *.swp
 *.swo
 *~
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+*.code-workspace
 
 # OS
 .DS_Store
@@ -44,14 +57,51 @@ lerna-debug.log*
 
 # Testing
 coverage/
+*/coverage/
 .nyc_output/
+*.lcov
+playwright-report/
+test-results/
+*.test.ts.snap
+__snapshots__/
 
 # Environment
 .env
 .env.local
 .env.*.local
+.env.development
+.env.production
+.env.test
+
+# Tauri
+src-tauri/gen/
+*/src-tauri/gen/
+.tauri/
 
 # Misc
 *.pid
 *.seed
 *.pid.lock
+.cache/
+.temp/
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+*.rej
+*.patch
+*.diff
+
+# TypeScript
+*.tsbuildinfo
+*/tsconfig.tsbuildinfo
+
+# Package managers
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnpm-debug.log*
