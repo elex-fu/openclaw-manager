@@ -1,8 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pnpm:*)",
-      "Bash(npm install:*)"
+      "Bash(echo No OpenClaw services in launchctl:*)",
+      "Bash(openclaw gateway:*)",
+      "Bash(sleep 3:*)",
+      "Bash(sleep 5:*)",
+      "Bash(printf gateway:\\\\n  mode: local\\\\n  port: 18789\\\\n:*)"
     ]
   }
 }
