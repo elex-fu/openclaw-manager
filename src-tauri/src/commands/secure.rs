@@ -14,27 +14,31 @@ pub struct SaveApiKeyRequest {
 /// 保存 API Key
 #[tauri::command]
 pub async fn save_api_key(request: SaveApiKeyRequest) -> Result<ApiResponse<()>, ()> {
-    let result = SecureStorage::save_api_key(&request.provider, &request.api_key);
+    let storage = SecureStorage::global().map_err(|_| ())?;
+    let result = storage.save_api_key(&request.provider, &request.api_key);
     Ok(ApiResponse::from_result(result))
 }
 
 /// 获取 API Key
 #[tauri::command]
 pub async fn get_api_key(provider: String) -> Result<ApiResponse<Option<String>>, ()> {
-    let result = SecureStorage::get_api_key(&provider);
+    let storage = SecureStorage::global().map_err(|_| ())?;
+    let result = storage.get_api_key(&provider);
     Ok(ApiResponse::from_result(result))
 }
 
 /// 删除 API Key
 #[tauri::command]
 pub async fn delete_api_key(provider: String) -> Result<ApiResponse<()>, ()> {
-    let result = SecureStorage::delete_api_key(&provider);
+    let storage = SecureStorage::global().map_err(|_| ())?;
+    let result = storage.delete_api_key(&provider);
     Ok(ApiResponse::from_result(result))
 }
 
 /// 检查是否存在 API Key
 #[tauri::command]
 pub async fn has_api_key(provider: String) -> Result<ApiResponse<bool>, ()> {
-    let result = SecureStorage::has_api_key(&provider);
+    let storage = SecureStorage::global().map_err(|_| ())?;
+    let result = storage.has_api_key(&provider);
     Ok(ApiResponse::from_result(result))
 }

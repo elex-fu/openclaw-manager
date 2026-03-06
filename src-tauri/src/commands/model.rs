@@ -22,7 +22,8 @@ pub async fn test_model_connection(
         .ok_or_else(|| format!("模型 {} 不存在", model_id))?;
 
     // 获取 API Key
-    let api_key = SecureStorage::get_api_key(&model.provider)
+    let storage = SecureStorage::global().map_err(|e| format!("安全存储初始化失败: {}", e))?;
+    let api_key = storage.get_api_key(&model.provider)
         .map_err(|e| format!("无法获取 API Key: {}", e))?
         .ok_or_else(|| "API Key 未设置".to_string())?;
 

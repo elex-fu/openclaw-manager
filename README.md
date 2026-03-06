@@ -58,8 +58,15 @@
 
 ### 安全与存储
 - [x] API 密钥安全存储（系统钥匙串）
+- [x] Linux 加密文件存储降级（无 D-Bus 环境自动切换）
 - [x] 配置加密存储
 - [x] 访问控制管理
+
+### 进程管理（MVP v2 增强）
+- [x] Windows 优雅关闭（Ctrl+Break → WM_CLOSE → 强制终止）
+- [x] Unix 信号处理（SIGTERM → SIGINT → SIGKILL）
+- [x] 服务健康检查
+- [x] 自动重启配置
 
 ### 诊断工具
 - [x] 系统环境检查
@@ -74,11 +81,16 @@
 
 ### 系统要求
 
-| 平台 | 最低版本 | 架构 |
-|------|----------|------|
-| macOS | 11.0 (Big Sur) | Intel / Apple Silicon |
-| Windows | Windows 10 | x64 |
-| Linux | Ubuntu 20.04+ | x64 / ARM64 |
+| 平台 | 最低版本 | 架构 | 状态 |
+|------|----------|------|------|
+| macOS | 11.0 (Big Sur) | Intel (x64) | ✅ 完全支持 |
+| macOS | 11.0 (Big Sur) | Apple Silicon (ARM64) | ✅ 完全支持 |
+| Windows | Windows 10 | x64 | ✅ 完全支持 |
+| Windows | Windows 11 | ARM64 | ✅ 完全支持 (v2.0+) |
+| Linux | Ubuntu 20.04+ | x64 | ✅ 完全支持 |
+| Linux | Ubuntu 20.04+ | ARM64 | ✅ 完全支持 (v2.0+) |
+
+**注意**: MVP v2.0 新增了对 Windows ARM64 和 Linux ARM64 平台的支持，现已覆盖所有主流桌面平台架构。
 
 ### macOS
 
@@ -134,6 +146,26 @@ sudo dpkg -i openclaw-manager_1.0.0_amd64.deb
 # RHEL/CentOS/Fedora
 sudo rpm -i openclaw-manager-1.0.0.x86_64.rpm
 ```
+
+#### Linux 依赖说明
+
+在 Linux 上，OpenClaw Manager 使用系统密钥链（keyring）安全存储 API 密钥。如果系统没有 D-Bus 或密钥链服务，应用将自动降级到加密文件存储模式。
+
+**完整功能模式（推荐）**:
+```bash
+# Debian/Ubuntu
+sudo apt install dbus libsecret-1-0 gnome-keyring
+
+# Fedora/RHEL
+sudo dnf install dbus libsecret gnome-keyring
+
+# Arch
+sudo pacman -S dbus libsecret gnome-keyring
+```
+
+**最小化模式**: 无需额外依赖，应用自动使用 AES-256-GCM 加密文件存储。
+
+更多详情参见 [Linux 依赖文档](./docs/LINUX-DEPENDENCIES.md)。
 
 ---
 

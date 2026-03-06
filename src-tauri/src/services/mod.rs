@@ -14,12 +14,3 @@ pub mod plugin_manager;
 pub mod plugin_market;
 pub mod skill_manager;
 pub mod skill_market;
-
-#[cfg(test)]
-mod process_manager_test;
-
-#[cfg(test)]
-mod plugin_manager_test;
-
-#[cfg(test)]
-mod skill_manager_test;

@@ -12,6 +12,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 计划添加插件市场
 - 计划支持多语言界面
 
+## [2.0.0] - 2024-03-07
+
+### Added
+
+#### 跨平台支持增强
+- **ARM64 架构支持** - 完整支持 Apple Silicon 和 ARM64 Linux/Windows
+  - macOS ARM64 (Apple Silicon) 原生支持
+  - Linux ARM64 (aarch64) 支持
+  - Windows ARM64 支持
+  - 条件编译优化单平台构建体积
+
+#### 安全存储改进
+- **Linux 加密文件存储降级** - 无 D-Bus 环境自动切换
+  - AES-256-GCM 加密算法
+  - 机器 ID 绑定（防止文件复制到其他机器）
+  - 自动检测 keyring 可用性
+  - 无缝降级到加密文件存储
+
+#### 进程管理完善
+- **Windows 优雅关闭** - 三级关闭策略
+  - Ctrl+Break 信号发送
+  - WM_CLOSE 消息发送
+  - 强制终止 (taskkill /F /T)
+  - 可配置超时时间
+
+- **Unix 信号处理** - 三级信号策略
+  - SIGTERM 优雅终止
+  - SIGINT 中断信号
+  - SIGKILL 强制终止
+
+#### 离线安装优化
+- **条件编译支持** - 6 平台独立构建
+  - macOS x64 / ARM64
+  - Windows x64 / ARM64
+  - Linux x64 / ARM64
+  - 单平台构建体积减少约 40%
+
+### Changed
+- 优化安全存储后端自动选择逻辑
+- 改进进程关闭的超时处理
+- 增强跨平台构建脚本
+
+### Fixed
+- Linux 无 D-Bus 环境无法存储 API 密钥的问题
+- Windows 进程强制终止导致数据丢失的问题
+- 离线安装包平台检测不准确的问题
+
 ## [0.1.1] - 2024-03-03
 
 ### Added
