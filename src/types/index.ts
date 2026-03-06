@@ -5,12 +5,15 @@ export interface ApiResponse<T> {
 }
 
 // 页面路由类型
-export type AppPage = 
-  | 'dashboard' 
-  | 'install-wizard' 
-  | 'model-config' 
-  | 'agent-manager' 
-  | 'diagnostics' 
+export type AppPage =
+  | 'dashboard'
+  | 'install-wizard'
+  | 'model-config'
+  | 'agent-manager'
+  | 'skills'
+  | 'logs'
+  | 'update'
+  | 'diagnostics'
   | 'settings';
 
 // 通知类型

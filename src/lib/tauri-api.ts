@@ -360,43 +360,43 @@ export const openclawApi = {
   },
 };
 
-// ==================== Service API (新增) ====================
+// ==================== Service API (OpenClaw服务控制) ====================
 export const serviceApi = {
   startService: () =>
-    invokeWithRetry<boolean>('start_service', undefined, { maxRetries: 2 }),
+    invokeWithRetry<boolean>('start_openclaw_service', undefined, { maxRetries: 2 }),
 
   stopService: () =>
-    invokeWithRetry<boolean>('stop_service', undefined, { maxRetries: 2 }),
+    invokeWithRetry<boolean>('stop_openclaw_service', undefined, { maxRetries: 2 }),
 
   getServiceStatus: () =>
-    invokeWithRetry<ServiceInfo>('get_service_status', undefined, { maxRetries: 2 }),
+    invokeWithRetry<ServiceInfo>('get_openclaw_service_status', undefined, { maxRetries: 2 }),
 
   healthCheck: () =>
-    invokeWithRetry<{ healthy: boolean; message?: string }>('health_check', undefined, { maxRetries: 1 }),
+    invokeWithRetry<{ healthy: boolean; message?: string }>('health_check_openclaw_service', undefined, { maxRetries: 1 }),
 };
 
 // ==================== Secure Storage API (新增) ====================
 export const secureStorageApi = {
   saveApiKey: (provider: string, apiKey: string) =>
-    invokeWithRetry<void>('save_model_api_key', { provider, apiKey }, { maxRetries: 2 }),
+    invokeWithRetry<void>('save_api_key', { provider, apiKey }, { maxRetries: 2 }),
 
   getApiKey: (provider: string) =>
-    invokeWithRetry<string | null>('get_model_api_key', { provider }, { maxRetries: 2 }),
+    invokeWithRetry<string | null>('get_api_key', { provider }, { maxRetries: 2 }),
 
   deleteApiKey: (provider: string) =>
-    invokeWithRetry<void>('delete_model_api_key', { provider }, { maxRetries: 2 }),
+    invokeWithRetry<void>('delete_api_key', { provider }, { maxRetries: 2 }),
 
   hasApiKey: (provider: string) =>
-    invokeWithRetry<boolean>('has_model_api_key', { provider }, { maxRetries: 2 }),
+    invokeWithRetry<boolean>('has_api_key', { provider }, { maxRetries: 2 }),
 };
 
 // ==================== Model API (新增) ====================
 export const modelApi = {
   getAllModels: () =>
-    invokeWithRetry<ModelConfig[]>('get_all_models', undefined, { maxRetries: 2 }),
+    invokeWithRetry<ModelConfig[]>('get_all_models_full', undefined, { maxRetries: 2 }),
 
   saveModel: (model: ModelConfig) =>
-    invokeWithRetry<ModelConfig>('save_model', { model }, { maxRetries: 2 }),
+    invokeWithRetry<ModelConfig>('save_model_full', { model }, { maxRetries: 2 }),
 
   deleteModel: (id: string) =>
     invokeWithRetry<boolean>('delete_model', { id }, { maxRetries: 2 }),
