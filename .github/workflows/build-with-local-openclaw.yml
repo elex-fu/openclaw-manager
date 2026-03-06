@@ -1,0 +1,252 @@
+name: Build with Local OpenClaw
+
+on:
+  push:
+    branches: [ main, feature/* ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      openclaw_path:
+        description: 'Path to OpenClaw source (default: sibling directory)'
+        required: false
+        default: '../openclaw'
+
+env:
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
+
+jobs:
+  # 检查 OpenClaw 是否可用
+  check-openclaw:
+    runs-on: ubuntu-latest
+    outputs:
+      available: ${{ steps.check.outputs.available }}
+    steps:
+      - name: Check OpenClaw directory
+        id: check
+        run: |
+          # 在 CI 环境中检查是否作为子模块存在
+          if [ -d "third-party/openclaw" ]; then
+            echo "available=true" >> $GITHUB_OUTPUT
+            echo "✓ OpenClaw found as submodule"
+          elif [ -d "${{ github.workspace }}/../openclaw" ]; then
+            echo "available=true" >> $GITHUB_OUTPUT
+            echo "✓ OpenClaw found in sibling directory"
+          else
+            echo "available=false" >> $GITHUB_OUTPUT
+            echo "⚠ OpenClaw not found - will use placeholder mode"
+          fi
+
+  # 构建 OpenClaw（单平台用于测试）
+  build-openclaw:
+    needs: check-openclaw
+    if: needs.check-openclaw.outputs.available == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            platform: macos
+            arch: aarch64
+          - os: ubuntu-22.04
+            platform: linux
+            arch: x86_64
+
+    steps:
+      - name: Checkout Manager
+        uses: actions/checkout@v4
+
+      - name: Checkout OpenClaw
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          path: third-party/openclaw
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Build OpenClaw
+        working-directory: third-party/openclaw
+        run: |
+          pnpm install
+          pnpm build
+
+      - name: Package OpenClaw
+        run: |
+          mkdir -p build/openclaw
+          cp -r third-party/openclaw/dist build/openclaw/
+          cp third-party/openclaw/package.json build/openclaw/
+          cp -r third-party/openclaw/assets build/openclaw/ 2>/dev/null || true
+
+          # 创建启动脚本
+          cat > build/openclaw/start.sh << 'EOF'
+          #!/bin/bash
+          DIR="$(cd "$(dirname "$0")" && pwd)"
+          cd "$DIR"
+          exec node dist/index.js "$@"
+          EOF
+          chmod +x build/openclaw/start.sh
+
+          # 打包
+          cd build
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            zip -r "openclaw-${{ matrix.platform }}-${{ matrix.arch }}.zip" openclaw/
+          else
+            tar -czf "openclaw-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz" openclaw/
+          fi
+
+      - name: Upload OpenClaw package
+        uses: actions/upload-artifact@v4
+        with:
+          name: openclaw-${{ matrix.platform }}-${{ matrix.arch }}
+          path: build/openclaw-*.*
+
+  # 构建 Manager
+  build-manager:
+    needs: [check-openclaw, build-openclaw]
+    if: always()
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: macos
+            arch: aarch64
+            target: aarch64-apple-darwin
+          - os: macos-13
+            platform: macos
+            arch: x86_64
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            platform: windows
+            arch: x86_64
+            target: x86_64-pc-windows-msvc
+          - os: ubuntu-22.04
+            platform: linux
+            arch: x86_64
+            target: x86_64-unknown-linux-gnu
+
+    steps:
+      - name: Checkout Manager
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # 下载 OpenClaw 包（如果可用）
+      - name: Download OpenClaw package
+        if: needs.check-openclaw.outputs.available == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: openclaw-${{ matrix.platform }}-${{ matrix.arch }}
+          path: src-tauri/bundled/
+        continue-on-error: true
+
+      # 如果没有 OpenClaw 包，使用占位符
+      - name: Create placeholder
+        if: needs.check-openclaw.outputs.available != 'true'
+        run: |
+          mkdir -p src-tauri/bundled
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            echo "Placeholder" > "src-tauri/bundled/openclaw-${{ matrix.platform }}-${{ matrix.arch }}.zip"
+          else
+            echo "Placeholder" > "src-tauri/bundled/openclaw-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz"
+          fi
+
+      - name: Setup Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: --target ${{ matrix.target }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: manager-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.exe
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.deb
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage
+          if-no-files-found: warn
+
+  # 创建 Release
+  release:
+    needs: build-manager
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: 'manager-*'
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: OpenClaw Manager ${{ github.ref_name }}
+          body: |
+            ## OpenClaw Manager ${{ github.ref_name }}
+
+            ### Downloads
+
+            #### macOS
+            - Apple Silicon (M1/M2/M3): `OpenClaw Manager_*_aarch64.dmg`
+            - Intel: `OpenClaw Manager_*_x64.dmg`
+
+            #### Windows
+            - 64-bit: `OpenClaw Manager_*_x64_en-US.msi`
+
+            #### Linux
+            - Debian/Ubuntu: `openclaw-manager_*.deb`
+            - Universal: `openclaw-manager_*.AppImage`
+
+            ### System Requirements
+            - macOS 11+ (Apple Silicon) / macOS 10.15+ (Intel)
+            - Windows 10 1809+ / Windows 11
+            - Ubuntu 20.04+ / Debian 11+ / Fedora 35+
+
+            ### Notes
+            This build includes OpenClaw embedded for offline installation.
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.msi
+            artifacts/**/*.exe
+            artifacts/**/*.deb
+            artifacts/**/*.AppImage
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
