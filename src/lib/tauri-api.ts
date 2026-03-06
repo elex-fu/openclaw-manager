@@ -98,6 +98,7 @@ export async function invokeWithRetry<T>(
     maxRetries?: number;
     baseDelay?: number;
     maxDelay?: number;
+    timeoutMs?: number;
     signal?: AbortSignal;
   } = {}
 ): Promise<T> {
@@ -105,6 +106,7 @@ export async function invokeWithRetry<T>(
     maxRetries = 3,
     baseDelay = 1000,
     maxDelay = 30000,
+    timeoutMs,
     signal,
   } = options;
 
@@ -117,7 +119,10 @@ export async function invokeWithRetry<T>(
     }
 
     try {
-      const response = await invoke<ApiResponse<T>>(command, args);
+      // 如果指定了超时时间，使用超时包装调用
+      const response = timeoutMs
+        ? await invokeWithTimeout<ApiResponse<T>>(command, args, timeoutMs)
+        : await invoke<ApiResponse<T>>(command, args);
       return handleApiResponse(response);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
@@ -159,7 +164,7 @@ export async function invokeWithRetry<T>(
       );
 }
 
-// 带超时控制的调用函数
+// 带超时控制的调用函数（直接调用invoke，不经过retry）
 export async function invokeWithTimeout<T>(
   command: string,
   args?: Record<string, unknown>,
@@ -171,7 +176,7 @@ export async function invokeWithTimeout<T>(
     }, timeoutMs);
   });
 
-  const invokePromise = invokeWithRetry<T>(command, args);
+  const invokePromise = invoke<T>(command, args);
 
   return Promise.race([invokePromise, timeoutPromise]);
 }
@@ -442,101 +447,6 @@ export const diagnosticsApi = {
 
   fixIssue: (issueName: string) =>
     invokeWithRetry<boolean>('fix_issue', { issueName }, { maxRetries: 1 }),
-};
-
-// ==================== File API (废弃但保留向后兼容) ====================
-export interface FileItem {
-  id: string;
-  file_name: string;
-  file_path: string;
-  file_type: string;
-  file_size: number;
-  description?: string;
-  tags?: string;
-  is_collected: boolean;
-  is_classified: boolean;
-  classification?: string;
-  custom_attributes?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface FileScanRequest {
-  path: string;
-  recursive: boolean;
-  file_types?: string[];
-}
-
-export interface FileScanResult {
-  files: FileItem[];
-  total_count: number;
-  total_size: number;
-}
-
-export const fileApi = {
-  scan: (req: FileScanRequest) =>
-    invokeWithRetry<FileScanResult>('scan_files', { req }, { maxRetries: 1 }),
-  getAll: (params?: {
-    file_type?: string;
-    is_collected?: boolean;
-    is_classified?: boolean;
-    limit?: number;
-    offset?: number;
-  }) => invokeWithRetry<FileItem[]>('get_files', params || {}, { maxRetries: 2 }),
-  getById: (id: string) =>
-    invokeWithRetry<FileItem | null>('get_file_by_id', { id }, { maxRetries: 2 }),
-  update: (id: string, data: Partial<FileItem>) =>
-    invokeWithRetry<FileItem>('update_file', {
-      req: { id, ...data },
-    }, { maxRetries: 2 }),
-  delete: (id: string) =>
-    invokeWithRetry<boolean>('delete_file', { id }, { maxRetries: 2 }),
-  parse: (fileName: string) =>
-    invokeWithRetry<{ file_name: string; parsed_data: unknown }>('parse_file_info', {
-      fileName,
-    }, { maxRetries: 2 }),
-};
-
-// ==================== Group API (废弃但保留向后兼容) ====================
-export interface Group {
-  id: string;
-  name: string;
-  description?: string;
-  icon?: string;
-  color?: string;
-  sort_order: number;
-  is_default: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface GroupWithFiles extends Group {
-  files: FileItem[];
-  file_count: number;
-}
-
-export const groupApi = {
-  getAll: (withFiles?: boolean) =>
-    invokeWithRetry<GroupWithFiles[]>('get_groups', { withFiles }, { maxRetries: 2 }),
-  create: (name: string, description?: string, icon?: string, color?: string) =>
-    invokeWithRetry<Group>('create_group', {
-      req: { name, description, icon, color },
-    }, { maxRetries: 2 }),
-  update: (id: string, data: Partial<Group>) =>
-    invokeWithRetry<Group>('update_group', {
-      req: { id, ...data },
-    }, { maxRetries: 2 }),
-  delete: (id: string) =>
-    invokeWithRetry<boolean>('delete_group', { id }, { maxRetries: 2 }),
-  addFile: (groupId: string, fileId: string) =>
-    invokeWithRetry<boolean>('add_file_to_group', {
-      req: { group_id: groupId, file_id: fileId },
-    }, { maxRetries: 2 }),
-  removeFile: (groupId: string, fileId: string) =>
-    invokeWithRetry<boolean>('remove_file_from_group', {
-      groupId,
-      fileId,
-    }, { maxRetries: 2 }),
 };
 
 // ==================== Log API ====================
