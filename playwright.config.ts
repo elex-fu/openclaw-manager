@@ -8,8 +8,8 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
 
-  /* Run tests in files in parallel */
-  fullyParallel: true,
+  /* Run tests in files in parallel - Disabled for Sidecar tests */
+  fullyParallel: false,
 
   /* Fail the build on CI if you accidentally left test.only in the source code */
   forbidOnly: !!process.env.CI,
@@ -17,11 +17,22 @@ export default defineConfig({
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
 
-  /* Opt out of parallel tests on CI */
-  workers: process.env.CI ? 1 : undefined,
+  /* Opt out of parallel tests on CI. Sidecar tests need to run serially */
+  workers: process.env.CI ? 1 : 1,
 
   /* Reporter to use */
-  reporter: 'html',
+  reporter: [
+    ['html', { open: 'never' }],
+    ['list'],
+  ],
+
+  /* Timeout for each test - Sidecar installation needs more time */
+  timeout: 300000, // 5 minutes
+
+  /* Expect timeout */
+  expect: {
+    timeout: 10000,
+  },
 
   /* Shared settings for all the projects below */
   use: {
