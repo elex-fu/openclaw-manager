@@ -63,12 +63,27 @@ export function clearSidecarInstallationFS(): void {
  * Clear Sidecar installation state from browser
  */
 export async function clearSidecarInstallation(page: Page): Promise<void> {
-  // Clear localStorage and sessionStorage
-  await page.evaluate(() => {
-    localStorage.removeItem('sidecarStatus');
-    localStorage.removeItem('installProgress');
-    sessionStorage.clear();
-  });
+  try {
+    // Wait for page to be ready before accessing localStorage
+    await page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {
+      // Page might not be loading, that's ok
+    });
+
+    // Clear localStorage and sessionStorage with error handling
+    await page.evaluate(() => {
+      try {
+        localStorage.removeItem('sidecarStatus');
+        localStorage.removeItem('installProgress');
+        sessionStorage.clear();
+      } catch (e) {
+        // localStorage access might be restricted, ignore
+        console.log('localStorage access failed:', e);
+      }
+    });
+  } catch (e) {
+    // Ignore errors from page.evaluate
+    console.log('Failed to clear browser state:', e);
+  }
 
   // Clear filesystem installation
   clearSidecarInstallationFS();

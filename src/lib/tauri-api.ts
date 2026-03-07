@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { invoke as tauriInvoke } from '@tauri-apps/api/core';
+import { listen as tauriListen, type UnlistenFn } from '@tauri-apps/api/event';
 import type {
   ApiResponse,
   InstallStatus,
@@ -57,6 +57,34 @@ export class AbortError extends Error {
     super(message);
     this.name = 'AbortError';
   }
+}
+
+// ==================== Test Mock Support ====================
+
+// Global type for test mocks
+declare global {
+  interface Window {
+    __TAURI_MOCK__?: {
+      invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
+      listen?: <T>(event: string, callback: (event: { payload: T }) => void) => Promise<() => void>;
+    };
+  }
+}
+
+// Wrapper that checks for mock in test environment
+async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  if (typeof window !== 'undefined' && window.__TAURI_MOCK__?.invoke) {
+    return window.__TAURI_MOCK__.invoke(cmd, args) as Promise<T>;
+  }
+  return tauriInvoke<T>(cmd, args);
+}
+
+// Wrapper for listen that checks for mock
+async function listen<T>(event: string, callback: (event: { payload: T }) => void): Promise<UnlistenFn> {
+  if (typeof window !== 'undefined' && window.__TAURI_MOCK__?.listen) {
+    return window.__TAURI_MOCK__.listen<T>(event, callback);
+  }
+  return tauriListen<T>(event, callback);
 }
 
 // 延迟函数
