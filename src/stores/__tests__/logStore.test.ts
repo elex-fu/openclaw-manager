@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useLogStore } from '../logStore'
-import type { LogEntry, LogSourceInfo, LogLevel } from '@/types'
+import type { LogEntry, LogSourceInfo } from '@/types'
 
 const mockLogEntry = (overrides: Partial<LogEntry> = {}): LogEntry => ({
   id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,

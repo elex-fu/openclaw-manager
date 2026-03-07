@@ -33,6 +33,7 @@ export type InstallStatus =
   | { type: 'NotInstalled' }
   | { type: 'Installing'; stage: string; progress: number }
   | { type: 'Installed'; version: string }
+  | { type: 'NeedsDependencies' }
   | { type: 'Error'; message: string };
 
 export interface InstallResult {
@@ -466,6 +467,20 @@ export interface SkillMarketItem {
   download_url: string;
   is_installed: boolean;
   has_update: boolean;
+}
+
+// 技能卡片通用属性接口
+export interface SkillCardItem {
+  id: string;
+  name: string;
+  description: string;
+  author: string;
+  version: string;
+  categories: string[];
+  tags: string[];
+  icon_url?: string;
+  rating: number;
+  downloads: number;
 }
 
 export interface ToggleSkillRequest {

@@ -25,7 +25,6 @@ import {
   TestTube,
   Star,
   GripVertical,
-  Settings2,
   CheckCircle2,
   XCircle,
   Loader2,
@@ -33,7 +32,7 @@ import {
 import { modelApi, secureStorageApi } from '@/lib/tauri-api'
 import { useConfigStore } from '@/stores/configStore'
 import { useAppStore } from '@/stores/appStore'
-import type { ModelConfigFull, ModelParameters, ModelCapabilities } from '@/types'
+import type { ModelConfig } from '@/types'
 
 // DnD Kit imports
 import {
@@ -56,8 +55,8 @@ import { CSS } from '@dnd-kit/utilities'
 
 // Sortable Model Card Component
 interface SortableModelCardProps {
-  model: ModelConfigFull
-  onEdit: (model: ModelConfigFull) => void
+  model: ModelConfig
+  onEdit: (model: ModelConfig) => void
   onDelete: (id: string) => void
   onTest: (id: string) => void
   onSetDefault: (id: string) => void
@@ -91,7 +90,7 @@ function SortableModelCard({
 
   return (
     <div ref={setNodeRef} style={style}>
-      <Card className={model.default ? 'border-primary' : ''}>
+      <Card className={model.isDefault ? 'border-primary' : ''}>
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2">
@@ -103,16 +102,13 @@ function SortableModelCard({
                 <GripVertical className="h-4 w-4 text-muted-foreground" />
               </div>
               <CardTitle>{model.name}</CardTitle>
-              {model.default && (
+              {model.isDefault && (
                 <Badge variant="default">
                   <Star className="mr-1 h-3 w-3" />
                   默认
                 </Badge>
               )}
               {!model.enabled && <Badge variant="secondary">已禁用</Badge>}
-              <Badge variant="outline" className="text-xs">
-                优先级: {model.priority}
-              </Badge>
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -157,22 +153,14 @@ function SortableModelCard({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-4 gap-4 text-sm">
+          <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <p className="text-muted-foreground">Temperature</p>
-              <p className="font-medium">{model.parameters.temperature}</p>
+              <p className="font-medium">{model.temperature}</p>
             </div>
             <div>
               <p className="text-muted-foreground">Max Tokens</p>
-              <p className="font-medium">{model.parameters.max_tokens}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Top P</p>
-              <p className="font-medium">{model.parameters.top_p}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">API Base</p>
-              <p className="font-medium truncate">{model.api_base || '默认'}</p>
+              <p className="font-medium">{model.max_tokens || '默认'}</p>
             </div>
           </div>
 
@@ -184,7 +172,7 @@ function SortableModelCard({
             </div>
           )}
 
-          {!model.default && (
+          {!model.isDefault && (
             <Button
               variant="outline"
               size="sm"
@@ -200,192 +188,12 @@ function SortableModelCard({
   )
 }
 
-// Model Parameter Form Component
-interface ModelParameterFormProps {
-  parameters: ModelParameters
-  onChange: (params: ModelParameters) => void
-}
-
-function ModelParameterForm({ parameters, onChange }: ModelParameterFormProps) {
-  const updateParam = <K extends keyof ModelParameters>(
-    key: K,
-    value: ModelParameters[K]
-  ) => {
-    onChange({ ...parameters, [key]: value })
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="temperature">
-            Temperature ({parameters.temperature})
-          </Label>
-          <Input
-            id="temperature"
-            type="range"
-            min="0"
-            max="2"
-            step="0.1"
-            value={parameters.temperature}
-            onChange={(e) => updateParam('temperature', parseFloat(e.target.value))}
-          />
-          <p className="text-xs text-muted-foreground">
-            控制输出的随机性，值越高输出越随机
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="max_tokens">Max Tokens</Label>
-          <Input
-            id="max_tokens"
-            type="number"
-            min="1"
-            max="8192"
-            value={parameters.max_tokens}
-            onChange={(e) => updateParam('max_tokens', parseInt(e.target.value) || 2048)}
-          />
-          <p className="text-xs text-muted-foreground">
-            生成文本的最大长度
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="top_p">
-            Top P ({parameters.top_p})
-          </Label>
-          <Input
-            id="top_p"
-            type="range"
-            min="0"
-            max="1"
-            step="0.1"
-            value={parameters.top_p}
-            onChange={(e) => updateParam('top_p', parseFloat(e.target.value))}
-          />
-          <p className="text-xs text-muted-foreground">
-            核采样参数，控制输出的多样性
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="presence_penalty">
-            Presence Penalty ({parameters.presence_penalty})
-          </Label>
-          <Input
-            id="presence_penalty"
-            type="range"
-            min="-2"
-            max="2"
-            step="0.1"
-            value={parameters.presence_penalty}
-            onChange={(e) => updateParam('presence_penalty', parseFloat(e.target.value))}
-          />
-          <p className="text-xs text-muted-foreground">
-            控制模型是否倾向于讨论新话题
-          </p>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="frequency_penalty">
-          Frequency Penalty ({parameters.frequency_penalty})
-        </Label>
-        <Input
-          id="frequency_penalty"
-          type="range"
-          min="-2"
-          max="2"
-          step="0.1"
-          value={parameters.frequency_penalty}
-          onChange={(e) => updateParam('frequency_penalty', parseFloat(e.target.value))}
-        />
-        <p className="text-xs text-muted-foreground">
-          控制模型是否倾向于重复相同的词语
-        </p>
-      </div>
-    </div>
-  )
-}
-
-// Model Capabilities Form Component
-interface ModelCapabilitiesFormProps {
-  capabilities: ModelCapabilities
-  onChange: (caps: ModelCapabilities) => void
-}
-
-function ModelCapabilitiesForm({ capabilities, onChange }: ModelCapabilitiesFormProps) {
-  const toggleCapability = (key: keyof ModelCapabilities) => {
-    onChange({ ...capabilities, [key]: !capabilities[key] })
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="flex items-center space-x-2">
-          <Switch
-            id="function_calling"
-            checked={capabilities.function_calling}
-            onCheckedChange={() => toggleCapability('function_calling')}
-          />
-          <Label htmlFor="function_calling">函数调用</Label>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <Switch
-            id="vision"
-            checked={capabilities.vision}
-            onCheckedChange={() => toggleCapability('vision')}
-          />
-          <Label htmlFor="vision">视觉输入</Label>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <Switch
-            id="streaming"
-            checked={capabilities.streaming}
-            onCheckedChange={() => toggleCapability('streaming')}
-          />
-          <Label htmlFor="streaming">流式输出</Label>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <Switch
-            id="json_mode"
-            checked={capabilities.json_mode}
-            onCheckedChange={() => toggleCapability('json_mode')}
-          />
-          <Label htmlFor="json_mode">JSON 模式</Label>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="max_context_length">最大上下文长度</Label>
-        <Input
-          id="max_context_length"
-          type="number"
-          placeholder="例如: 128000"
-          value={capabilities.max_context_length || ''}
-          onChange={(e) =>
-            onChange({
-              ...capabilities,
-              max_context_length: e.target.value ? parseInt(e.target.value) : undefined,
-            })
-          }
-        />
-      </div>
-    </div>
-  )
-}
-
 export function ModelConfigPage() {
   const queryClient = useQueryClient()
   const { addNotification } = useAppStore()
   const { setDefaultModel } = useConfigStore()
 
-  const [editingModel, setEditingModel] = useState<ModelConfigFull | null>(null)
+  const [editingModel, setEditingModel] = useState<ModelConfig | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [apiKeyInput, setApiKeyInput] = useState('')
   const [testStatus, setTestStatus] = useState<Record<string, { loading: boolean; result?: { success: boolean; latency: number; message?: string } }>>({})
@@ -401,14 +209,14 @@ export function ModelConfigPage() {
   // 查询所有模型
   const { data: modelsData, isLoading } = useQuery({
     queryKey: ['models-full'],
-    queryFn: () => modelApi.getAllModelsFull(),
+    queryFn: () => modelApi.getAllModels(),
   })
 
-  const models = modelsData?.data || []
+  const models = modelsData || []
 
   // 保存模型
   const saveMutation = useMutation({
-    mutationFn: modelApi.saveModelFull,
+    mutationFn: modelApi.saveModel,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['models-full'] })
       setIsDialogOpen(false)
@@ -449,18 +257,18 @@ export function ModelConfigPage() {
       const result = await modelApi.testModelConnection(modelId)
       setTestStatus((prev) => ({
         ...prev,
-        [modelId]: { loading: false, result: result.data || undefined },
+        [modelId]: { loading: false, result: result || undefined },
       }))
-      if (result.data?.success) {
+      if (result.success) {
         addNotification({
           title: '连接成功',
-          message: `延迟: ${result.data.latency}ms`,
+          message: `延迟: ${result.latency}ms`,
           type: 'success',
         })
       } else {
         addNotification({
           title: '连接失败',
-          message: result.data?.message || '未知错误',
+          message: result.message || '未知错误',
           type: 'error',
         })
       }
@@ -496,16 +304,13 @@ export function ModelConfigPage() {
     const { active, over } = event
     if (!over || active.id === over.id) return
 
-    const oldIndex = models.findIndex((m) => m.id === active.id)
-    const newIndex = models.findIndex((m: ModelConfigFull) => m.id === over.id)
+    const oldIndex = models.findIndex((m: ModelConfig) => m.id === active.id)
+    const newIndex = models.findIndex((m: ModelConfig) => m.id === over.id)
 
     const newModels = arrayMove(models, oldIndex, newIndex)
 
-    // 更新优先级
-    const modelOrders = newModels.map((m, index) => ({ id: m.id, priority: index }))
-
     try {
-      await modelApi.reorderModels(newModels.map(m => m.id))
+      await modelApi.reorderModels(newModels.map((m: ModelConfig) => m.id))
       queryClient.invalidateQueries({ queryKey: ['models-full'] })
       addNotification({
         title: '排序已更新',
@@ -540,28 +345,16 @@ export function ModelConfigPage() {
       provider: 'openai',
       model: 'gpt-4',
       api_base: '',
-      priority: models.length,
-      parameters: {
-        temperature: 1.0,
-        max_tokens: 2048,
-        top_p: 1.0,
-        presence_penalty: 0.0,
-        frequency_penalty: 0.0,
-      },
-      capabilities: {
-        function_calling: false,
-        vision: false,
-        streaming: true,
-        json_mode: false,
-      },
+      temperature: 1.0,
+      max_tokens: 2048,
       enabled: true,
-      default: false,
+      isDefault: false,
     })
     setApiKeyInput('')
     setIsDialogOpen(true)
   }
 
-  const handleEdit = async (model: ModelConfigFull) => {
+  const handleEdit = async (model: ModelConfig) => {
     setEditingModel({ ...model })
     // 获取已保存的 API Key
     const keyResult = await secureStorageApi.getApiKey(model.provider)
@@ -610,11 +403,11 @@ export function ModelConfigPage() {
             onDragEnd={handleDragEnd}
           >
             <SortableContext
-              items={models.map((m: ModelConfigFull) => m.id)}
+              items={models.map((m: ModelConfig) => m.id)}
               strategy={verticalListSortingStrategy}
             >
               <div className="grid gap-4">
-                {models.map((model: ModelConfigFull) => (
+                {models.map((model: ModelConfig) => (
                   <SortableModelCard
                     key={model.id}
                     model={model}
@@ -644,13 +437,8 @@ export function ModelConfigPage() {
 
           {editingModel && (
             <Tabs defaultValue="basic" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-1">
                 <TabsTrigger value="basic">基本信息</TabsTrigger>
-                <TabsTrigger value="parameters">
-                  <Settings2 className="mr-2 h-4 w-4" />
-                  高级参数
-                </TabsTrigger>
-                <TabsTrigger value="capabilities">能力配置</TabsTrigger>
               </TabsList>
 
               <TabsContent value="basic" className="space-y-4 py-4">
@@ -733,24 +521,6 @@ export function ModelConfigPage() {
                   />
                   <Label htmlFor="enabled">启用此模型</Label>
                 </div>
-              </TabsContent>
-
-              <TabsContent value="parameters" className="py-4">
-                <ModelParameterForm
-                  parameters={editingModel.parameters}
-                  onChange={(params) =>
-                    setEditingModel({ ...editingModel, parameters: params })
-                  }
-                />
-              </TabsContent>
-
-              <TabsContent value="capabilities" className="py-4">
-                <ModelCapabilitiesForm
-                  capabilities={editingModel.capabilities}
-                  onChange={(caps) =>
-                    setEditingModel({ ...editingModel, capabilities: caps })
-                  }
-                />
               </TabsContent>
             </Tabs>
           )}

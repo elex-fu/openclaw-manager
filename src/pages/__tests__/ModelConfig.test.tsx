@@ -3,13 +3,13 @@ import { screen, waitFor } from '@testing-library/react'
 import { ModelConfigPage } from '../ModelConfig'
 import { render } from '@/test/utils'
 import * as tauriApi from '@/lib/tauri-api'
-import type { ModelConfigFull } from '@/types'
+import type { ModelConfig } from '@/types'
 
 // Mock Tauri API - invokeWithRetry returns data directly, not ApiResponse
 vi.mock('@/lib/tauri-api', () => ({
   modelApi: {
-    getAllModelsFull: vi.fn(),
-    saveModelFull: vi.fn(),
+    getAllModels: vi.fn(),
+    saveModel: vi.fn(),
     deleteModel: vi.fn(),
     setDefaultModel: vi.fn(),
     testModelConnection: vi.fn(),
@@ -67,29 +67,17 @@ vi.mock('@dnd-kit/utilities', () => ({
   },
 }))
 
-const mockModels: ModelConfigFull[] = [
+const mockModels: ModelConfig[] = [
   {
     id: 'model-1',
     name: 'GPT-4',
     provider: 'openai',
     model: 'gpt-4',
     api_base: 'https://api.openai.com/v1',
-    priority: 0,
-    parameters: {
-      temperature: 1.0,
-      max_tokens: 2048,
-      top_p: 1.0,
-      presence_penalty: 0.0,
-      frequency_penalty: 0.0,
-    },
-    capabilities: {
-      function_calling: true,
-      vision: false,
-      streaming: true,
-      json_mode: false,
-    },
+    temperature: 1.0,
+    max_tokens: 2048,
     enabled: true,
-    default: true,
+    isDefault: true,
   },
   {
     id: 'model-2',
@@ -97,22 +85,10 @@ const mockModels: ModelConfigFull[] = [
     provider: 'anthropic',
     model: 'claude-3-opus-20240229',
     api_base: '',
-    priority: 1,
-    parameters: {
-      temperature: 0.7,
-      max_tokens: 4096,
-      top_p: 1.0,
-      presence_penalty: 0.0,
-      frequency_penalty: 0.0,
-    },
-    capabilities: {
-      function_calling: true,
-      vision: true,
-      streaming: true,
-      json_mode: true,
-    },
+    temperature: 0.7,
+    max_tokens: 4096,
     enabled: true,
-    default: false,
+    isDefault: false,
   },
 ]
 
@@ -120,7 +96,7 @@ describe('ModelConfig', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // invokeWithRetry returns data directly
-    vi.mocked(tauriApi.modelApi.getAllModelsFull).mockResolvedValue(mockModels)
+    vi.mocked(tauriApi.modelApi.getAllModels).mockResolvedValue(mockModels)
     vi.mocked(tauriApi.secureStorageApi.getApiKey).mockResolvedValue('')
   })
 
@@ -164,12 +140,12 @@ describe('ModelConfig', () => {
       render(<ModelConfigPage />)
 
       await waitFor(() => {
-        expect(tauriApi.modelApi.getAllModelsFull).toHaveBeenCalled()
+        expect(tauriApi.modelApi.getAllModels).toHaveBeenCalled()
       })
     })
 
     it('should display empty state when no models', async () => {
-      vi.mocked(tauriApi.modelApi.getAllModelsFull).mockResolvedValue([])
+      vi.mocked(tauriApi.modelApi.getAllModels).mockResolvedValue([])
 
       render(<ModelConfigPage />)
 
@@ -198,7 +174,7 @@ describe('ModelConfig', () => {
 
   describe('错误处理', () => {
     it('should handle API errors gracefully without crashing', async () => {
-      vi.mocked(tauriApi.modelApi.getAllModelsFull).mockRejectedValue(
+      vi.mocked(tauriApi.modelApi.getAllModels).mockRejectedValue(
         new Error('Failed to load models')
       )
 
@@ -210,7 +186,7 @@ describe('ModelConfig', () => {
     })
 
     it('should handle network errors', async () => {
-      vi.mocked(tauriApi.modelApi.getAllModelsFull).mockRejectedValue(new Error('Network error'))
+      vi.mocked(tauriApi.modelApi.getAllModels).mockRejectedValue(new Error('Network error'))
 
       render(<ModelConfigPage />)
 

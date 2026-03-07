@@ -50,9 +50,7 @@ export const AgentCard = memo(function AgentCard({ agent, onEdit, onDelete, view
   const enableMutation = useMutation({
     mutationFn: async (value: boolean) => {
       const result = await agentApi.saveAgent({ ...agent, enabled: value });
-      if (result.success) {
-        setEnabled(value);
-      }
+      setEnabled(value);
       return result;
     },
     onSuccess: (_, value) => {
@@ -110,10 +108,6 @@ export const AgentCard = memo(function AgentCard({ agent, onEdit, onDelete, view
   const handleDelete = useCallback(() => {
     onDelete?.(agent.id);
   }, [onDelete, agent.id]);
-
-  const handleExpand = useCallback(() => {
-    setIsExpanded(prev => !prev);
-  }, []);
 
   // 格式化日期 - 使用 useCallback
   const formatDate = useCallback((dateStr: string) => {

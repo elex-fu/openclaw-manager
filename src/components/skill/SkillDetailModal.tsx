@@ -28,10 +28,11 @@ import {
   Calendar,
   GitBranch,
 } from 'lucide-react'
-import type { Skill } from '@/types'
+import type { SkillCardItem } from '@/types'
+import * as React from 'react'
 
 interface SkillDetailModalProps {
-  skill: Skill | null
+  skill: SkillCardItem | null
   isOpen: boolean
   onClose: () => void
   isInstalled: boolean
@@ -154,10 +155,12 @@ export function SkillDetailModal({
                 <User className="h-4 w-4" />
                 {skill.author}
               </div>
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <Calendar className="h-4 w-4" />
-                更新于 {new Date(skill.updated_at).toLocaleDateString('zh-CN')}
-              </div>
+              {(skill as unknown as { updated_at?: string }).updated_at && (
+                <div className="flex items-center gap-1 text-muted-foreground">
+                  <Calendar className="h-4 w-4" />
+                  更新于 {new Date((skill as unknown as { updated_at: string }).updated_at).toLocaleDateString('zh-CN')}
+                </div>
+              )}
             </div>
 
             <Separator />
@@ -166,10 +169,10 @@ export function SkillDetailModal({
             <div>
               <h4 className="text-sm font-medium mb-2">分类</h4>
               <div className="flex flex-wrap gap-2">
-                {skill.categories.map((category) => (
+                {(skill as { categories: string[] }).categories.map((category: string) => (
                   <Badge key={category} variant="outline">
                     {categoryIcons[category] && (
-                      <span className="mr-1">{categoryIcons[category]}</span>
+                      <span className="mr-1">{categoryIcons[category] as React.ReactNode}</span>
                     )}
                     {category}
                   </Badge>
@@ -178,25 +181,25 @@ export function SkillDetailModal({
             </div>
 
             {/* 标签 */}
-            {skill.tags.length > 0 && (
+            {((skill as unknown as { tags: string[] }).tags.length > 0 ? (
               <div>
                 <h4 className="text-sm font-medium mb-2">标签</h4>
                 <div className="flex flex-wrap gap-2">
-                  {skill.tags.map((tag) => (
+                  {(skill as unknown as { tags: string[] }).tags.map((tag) => (
                     <Badge key={tag} variant="secondary">
                       {tag}
                     </Badge>
                   ))}
                 </div>
               </div>
-            )}
-
+            ) : false) as any}
             {/* Hook列表 */}
-            {skill.hooks.length > 0 && (
+            {(skill as unknown as { hooks?: Array<{ trigger: string; description?: string; hook_type: string }> }).hooks &&
+             (skill as unknown as { hooks?: Array<{ trigger: string; description?: string; hook_type: string }> }).hooks!.length > 0 && (
               <div>
                 <h4 className="text-sm font-medium mb-2">功能 Hooks</h4>
                 <div className="space-y-2">
-                  {skill.hooks.map((hook, index) => (
+                  {(skill as unknown as { hooks: Array<{ trigger: string; description?: string; hook_type: string }> }).hooks.map((hook, index) => (
                     <div
                       key={index}
                       className="flex items-center justify-between p-3 rounded-lg bg-muted"
@@ -217,11 +220,12 @@ export function SkillDetailModal({
             )}
 
             {/* 依赖 */}
-            {skill.dependencies.length > 0 && (
+            {(skill as unknown as { dependencies?: string[] }).dependencies &&
+             (skill as unknown as { dependencies?: string[] }).dependencies!.length > 0 && (
               <div>
                 <h4 className="text-sm font-medium mb-2">依赖技能</h4>
                 <div className="flex flex-wrap gap-2">
-                  {skill.dependencies.map((dep) => (
+                  {(skill as unknown as { dependencies: string[] }).dependencies.map((dep) => (
                     <Badge key={dep} variant="outline">
                       {dep}
                     </Badge>
@@ -231,7 +235,7 @@ export function SkillDetailModal({
             )}
 
             {/* 配置说明 */}
-            {skill.config_schema && (
+            {(skill as unknown as { config_schema?: unknown }).config_schema && (
               <div>
                 <h4 className="text-sm font-medium mb-2">可配置</h4>
                 <p className="text-sm text-muted-foreground">

@@ -5,8 +5,6 @@ import { Badge } from '@/components/ui/badge';
 import { Activity, Cpu, HardDrive, MemoryStick, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -101,12 +99,6 @@ export function ResourceMonitor() {
     return 'text-green-500';
   };
 
-  const getProgressColor = (usage: number) => {
-    if (usage >= 90) return 'bg-red-500';
-    if (usage >= 70) return 'bg-yellow-500';
-    return 'bg-green-500';
-  };
-
   return (
     <Card className="w-full">
       <CardHeader>
@@ -176,7 +168,7 @@ export function ResourceMonitor() {
                 />
                 <Tooltip
                   contentStyle={{ fontSize: 12 }}
-                  formatter={(value: number) => [`${value}%`, 'CPU']}
+                  formatter={(value) => [`${value}%`, 'CPU']}
                 />
                 <Area
                   type="monotone"

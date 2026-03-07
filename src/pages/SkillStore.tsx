@@ -55,7 +55,7 @@ import { SkillConfigForm } from '@/components/skill/SkillConfigForm'
 import { InstalledSkillList } from '@/components/skill/InstalledSkillList'
 import { EmptySearchState } from '@/components/error'
 import { StaggerContainer, StaggerItem, ScaleIn } from '@/components/animation'
-import type { Skill, InstalledSkill } from '@/types'
+import type { InstalledSkill, SkillMarketItem, SkillCardItem } from '@/types'
 
 type ViewMode = 'market' | 'installed'
 type SortOption = 'popular' | 'latest' | 'rating' | 'name'
@@ -82,7 +82,7 @@ export function SkillStore() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [sortBy, setSortBy] = useState<SortOption>('popular')
-  const [detailSkill, setDetailSkill] = useState<Skill | null>(null)
+  const [detailSkill, setDetailSkill] = useState<SkillCardItem | null>(null)
   const [configSkill, setConfigSkill] = useState<InstalledSkill | null>(null)
   const [uninstallSkillId, setUninstallSkillId] = useState<string | null>(null)
 
@@ -246,7 +246,7 @@ export function SkillStore() {
   }, [marketSkills, sortBy])
 
   // 处理安装
-  const handleInstall = (skill: Skill) => {
+  const handleInstall = (skill: SkillCardItem) => {
     installMutation.mutate(skill.id)
   }
 
@@ -402,7 +402,7 @@ export function SkillStore() {
                   热门技能
                 </h2>
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {popularSkills.map((skill: Skill) => (
+                  {popularSkills.map((skill: SkillMarketItem) => (
                     <SkillCard
                       key={skill.id}
                       skill={skill}

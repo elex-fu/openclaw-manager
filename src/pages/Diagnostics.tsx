@@ -92,10 +92,7 @@ export function Diagnostics() {
     queryKey: ['diagnostics'],
     queryFn: async () => {
       const response = await diagnosticsApi.runDiagnostics()
-      if (!response.success) {
-        throw new Error(response.error || '诊断失败')
-      }
-      return response.data
+      return response
     },
     enabled: false, // 手动触发
   })
@@ -111,10 +108,7 @@ export function Diagnostics() {
   const fixMutation = useMutation({
     mutationFn: async (checkName: string) => {
       const response = await diagnosticsApi.fixIssue(checkName)
-      if (!response.success) {
-        throw new Error(response.error || '修复失败')
-      }
-      return response.data
+      return response
     },
     onSuccess: (result, checkName) => {
       if (result) {
@@ -147,10 +141,7 @@ export function Diagnostics() {
       const fixableChecks = checks.filter(c => c.fixable && c.status !== 'pass')
       if (fixableChecks.length === 0) return { fixed: [], failed: [] }
       const response = await diagnosticsApi.autoFix(fixableChecks.map(c => c.name))
-      if (!response.success) {
-        throw new Error(response.error || '批量修复失败')
-      }
-      return response.data
+      return response
     },
     onSuccess: (result) => {
       const { fixed, failed } = result || { fixed: [], failed: [] }

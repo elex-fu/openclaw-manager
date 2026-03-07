@@ -2,7 +2,19 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Star, Download, Check, ChevronRight, Code, PenTool, BarChart, Image, Zap, MessageCircle, Search, Cpu, LayoutGrid } from 'lucide-react'
-import type { Skill } from '@/types'
+// 技能卡片通用属性接口
+interface SkillCardItem {
+  id: string
+  name: string
+  description: string
+  author: string
+  version: string
+  categories: string[]
+  tags: string[]
+  icon_url?: string
+  rating: number
+  downloads: number
+}
 
 // 分类图标映射
 const categoryIcons: Record<string, React.ReactNode> = {
@@ -17,7 +29,7 @@ const categoryIcons: Record<string, React.ReactNode> = {
 }
 
 interface SkillCardProps {
-  skill: Skill
+  skill: SkillCardItem
   isInstalled?: boolean
   isEnabled?: boolean
   onInstall?: () => void

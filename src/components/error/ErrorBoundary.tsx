@@ -126,7 +126,7 @@ export class ErrorBoundary extends Component<Props, State> {
     this.setState({ error, errorInfo })
 
     // 上报错误
-    errorReporter.report(error, errorInfo.componentStack)
+    errorReporter.report(error, errorInfo.componentStack ?? undefined)
 
     // 调用外部错误处理
     this.props.onError?.(error, errorInfo)

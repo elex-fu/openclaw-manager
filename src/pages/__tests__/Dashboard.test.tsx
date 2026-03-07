@@ -23,9 +23,8 @@ describe('Dashboard', () => {
 
   it('should render without crashing', () => {
     vi.mocked(tauriApi.openclawApi.checkInstallation).mockResolvedValue({
-      success: true,
-      data: { type: 'Installed', version: '1.0.0' },
-      error: null,
+      type: 'Installed',
+      version: '1.0.0',
     })
 
     const { container } = render(<Dashboard />)
@@ -34,9 +33,8 @@ describe('Dashboard', () => {
 
   it('should call checkInstallation on mount', async () => {
     vi.mocked(tauriApi.openclawApi.checkInstallation).mockResolvedValue({
-      success: true,
-      data: { type: 'Installed', version: '1.0.0' },
-      error: null,
+      type: 'Installed',
+      version: '1.0.0',
     })
 
     render(<Dashboard />)

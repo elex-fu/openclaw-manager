@@ -45,8 +45,8 @@ export function InstallWizard() {
       addLog('🚀 开始自动初始化...', 'info')
     },
     onSuccess: (result) => {
-      if (result.data?.success) {
-        addLog(`🎉 初始化成功: ${result.data.message}`, 'success')
+      if (result.success) {
+        addLog(`🎉 初始化成功: ${result.message}`, 'success')
         queryClient.invalidateQueries({ queryKey: ['openclaw-installation'] })
         addNotification({
           title: '准备就绪',
@@ -55,7 +55,7 @@ export function InstallWizard() {
         })
         setCurrentStep(1) // 自动进入配置步骤
       } else {
-        const errorMsg = result.error || result.data?.message || '未知错误'
+        const errorMsg = result.message || '未知错误'
         addLog(`初始化失败: ${errorMsg}`, 'error')
         addNotification({
           title: '初始化失败',

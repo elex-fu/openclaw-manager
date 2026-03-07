@@ -135,7 +135,7 @@ export function ActivityLog() {
                 <p className="text-sm">暂无活动记录</p>
               </div>
             ) : (
-              activities.map((activity, index) => {
+              activities.map((activity) => {
                 const Icon = ACTIVITY_ICONS[activity.activity_type] || Server;
                 const colorClass = ACTIVITY_COLORS[activity.activity_type] || ACTIVITY_COLORS.service;
                 const label = ACTIVITY_LABELS[activity.activity_type] || '其他';

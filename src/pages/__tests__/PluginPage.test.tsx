@@ -93,37 +93,17 @@ function renderWithQuery(ui: React.ReactElement) {
 describe('PluginPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(tauriApi.pluginApi.getAll).mockResolvedValue({
-      success: true,
-      data: mockInstalledPlugins,
-      error: null,
-    })
-    vi.mocked(tauriApi.pluginMarketApi.getCategories).mockResolvedValue({
-      success: true,
-      data: mockCategories,
-      error: null,
-    })
-    vi.mocked(tauriApi.pluginMarketApi.getPopular).mockResolvedValue({
-      success: true,
-      data: mockMarketPlugins,
-      error: null,
-    })
-    vi.mocked(tauriApi.pluginMarketApi.getLatest).mockResolvedValue({
-      success: true,
-      data: [],
-      error: null,
-    })
+    vi.mocked(tauriApi.pluginApi.getAll).mockResolvedValue(mockInstalledPlugins)
+    vi.mocked(tauriApi.pluginMarketApi.getCategories).mockResolvedValue(mockCategories)
+    vi.mocked(tauriApi.pluginMarketApi.getPopular).mockResolvedValue(mockMarketPlugins)
+    vi.mocked(tauriApi.pluginMarketApi.getLatest).mockResolvedValue([])
     vi.mocked(tauriApi.pluginMarketApi.search).mockResolvedValue({
-      success: true,
-      data: {
-        plugins: mockMarketPlugins,
-        total: 1,
-        page: 1,
-        per_page: 20,
-        has_more: false,
-      } as SearchPluginsResult,
-      error: null,
-    })
+      plugins: mockMarketPlugins,
+      total: 1,
+      page: 1,
+      per_page: 20,
+      has_more: false,
+    } as SearchPluginsResult)
   })
 
   it('renders installed plugins tab by default', async () => {
@@ -156,11 +136,7 @@ describe('PluginPage', () => {
   })
 
   it('shows empty state when no plugins installed', async () => {
-    vi.mocked(tauriApi.pluginApi.getAll).mockResolvedValue({
-      success: true,
-      data: [],
-      error: null,
-    })
+    vi.mocked(tauriApi.pluginApi.getAll).mockResolvedValue([])
 
     renderWithQuery(<PluginPage />)
 
@@ -171,11 +147,7 @@ describe('PluginPage', () => {
   })
 
   it('calls enable API when enable button is clicked', async () => {
-    vi.mocked(tauriApi.pluginApi.enable).mockResolvedValue({
-      success: true,
-      data: mockInstalledPlugins[1],
-      error: null,
-    })
+    vi.mocked(tauriApi.pluginApi.enable).mockResolvedValue(mockInstalledPlugins[1])
 
     renderWithQuery(<PluginPage />)
 
@@ -192,11 +164,7 @@ describe('PluginPage', () => {
   })
 
   it('calls disable API when disable button is clicked', async () => {
-    vi.mocked(tauriApi.pluginApi.disable).mockResolvedValue({
-      success: true,
-      data: mockInstalledPlugins[0],
-      error: null,
-    })
+    vi.mocked(tauriApi.pluginApi.disable).mockResolvedValue(mockInstalledPlugins[0])
 
     renderWithQuery(<PluginPage />)
 
@@ -213,11 +181,7 @@ describe('PluginPage', () => {
   })
 
   it('calls uninstall API when uninstall button is clicked', async () => {
-    vi.mocked(tauriApi.pluginApi.uninstall).mockResolvedValue({
-      success: true,
-      data: true,
-      error: null,
-    })
+    vi.mocked(tauriApi.pluginApi.uninstall).mockResolvedValue(true)
 
     renderWithQuery(<PluginPage />)
 
@@ -237,37 +201,17 @@ describe('PluginPage', () => {
 describe('Plugin Market', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(tauriApi.pluginApi.getAll).mockResolvedValue({
-      success: true,
-      data: [],
-      error: null,
-    })
-    vi.mocked(tauriApi.pluginMarketApi.getCategories).mockResolvedValue({
-      success: true,
-      data: mockCategories,
-      error: null,
-    })
-    vi.mocked(tauriApi.pluginMarketApi.getPopular).mockResolvedValue({
-      success: true,
-      data: mockMarketPlugins,
-      error: null,
-    })
-    vi.mocked(tauriApi.pluginMarketApi.getLatest).mockResolvedValue({
-      success: true,
-      data: [],
-      error: null,
-    })
+    vi.mocked(tauriApi.pluginApi.getAll).mockResolvedValue([])
+    vi.mocked(tauriApi.pluginMarketApi.getCategories).mockResolvedValue(mockCategories)
+    vi.mocked(tauriApi.pluginMarketApi.getPopular).mockResolvedValue(mockMarketPlugins)
+    vi.mocked(tauriApi.pluginMarketApi.getLatest).mockResolvedValue([])
     vi.mocked(tauriApi.pluginMarketApi.search).mockResolvedValue({
-      success: true,
-      data: {
-        plugins: mockMarketPlugins,
-        total: 1,
-        page: 1,
-        per_page: 20,
-        has_more: false,
-      } as SearchPluginsResult,
-      error: null,
-    })
+      plugins: mockMarketPlugins,
+      total: 1,
+      page: 1,
+      per_page: 20,
+      has_more: false,
+    } as SearchPluginsResult)
   })
 
   it('displays popular plugins in market tab', async () => {

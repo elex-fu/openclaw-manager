@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SkillStore } from '../SkillStore'
@@ -102,26 +102,10 @@ const renderWithQueryClient = (ui: React.ReactElement) => {
 describe('SkillStore', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(tauriApi.skillApi.getCategories).mockResolvedValue({
-      success: true,
-      data: mockCategories,
-      error: null,
-    })
-    vi.mocked(tauriApi.skillApi.searchMarket).mockResolvedValue({
-      success: true,
-      data: mockSearchResult,
-      error: null,
-    })
-    vi.mocked(tauriApi.skillApi.getAll).mockResolvedValue({
-      success: true,
-      data: mockInstalledSkills,
-      error: null,
-    })
-    vi.mocked(tauriApi.skillApi.getPopular).mockResolvedValue({
-      success: true,
-      data: [],
-      error: null,
-    })
+    vi.mocked(tauriApi.skillApi.getCategories).mockResolvedValue(mockCategories)
+    vi.mocked(tauriApi.skillApi.searchMarket).mockResolvedValue(mockSearchResult)
+    vi.mocked(tauriApi.skillApi.getAll).mockResolvedValue(mockInstalledSkills)
+    vi.mocked(tauriApi.skillApi.getPopular).mockResolvedValue([])
   })
 
   it('renders skill store page', async () => {

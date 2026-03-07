@@ -52,10 +52,10 @@ export function Dashboard() {
     queryKey: ['service-status'],
     queryFn: () => serviceApi.getServiceStatus(),
     refetchInterval: 5000,
-    enabled: installData?.data?.type === 'Installed',
+    enabled: installData?.type === 'Installed',
   })
 
-  const installStatus = installData?.data
+  const installStatus = installData
   const isInstalled = installStatus?.type === 'Installed'
 
   // 自动安装 mutation
@@ -66,8 +66,8 @@ export function Dashboard() {
       setAutoInstallStarted(true)
     },
     onSuccess: (result) => {
-      if (result.data?.success) {
-        addLog(`✅ 初始化完成: ${result.data.message}`, 'success')
+      if (result.success) {
+        addLog(`✅ 初始化完成: ${result.message}`, 'success')
         addNotification({
           title: '准备就绪',
           message: 'OpenClaw 已成功初始化，可以开始使用',
@@ -75,7 +75,7 @@ export function Dashboard() {
         })
         refetchInstall()
       } else {
-        const errorMsg = result.error || result.data?.message || '未知错误'
+        const errorMsg = result.message || '未知错误'
         addLog(`❌ 初始化失败: ${errorMsg}`, 'error')
         addNotification({
           title: '初始化失败',
