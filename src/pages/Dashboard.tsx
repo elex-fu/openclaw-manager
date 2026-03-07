@@ -52,6 +52,14 @@ export function Dashboard() {
     refetchInterval: 30000,
   })
 
+  // 查询 Sidecar 安装状态
+  const { data: sidecarStatus, isLoading: isSidecarLoading } = useQuery({
+    queryKey: ['sidecar-installation'],
+    queryFn: () => sidecarApi.checkSidecarInstallation(),
+    enabled: installStatus?.type === 'Installed',
+    refetchInterval: 30000,
+  })
+
   const isInstalled = installStatus?.type === 'Installed'
 
   // 查询服务状态
@@ -203,6 +211,13 @@ export function Dashboard() {
       })
     }
   }, [installStatus, addNotification])
+
+  // Sidecar 安装检查：OpenClaw 安装完成后，如果 Sidecar 未安装，跳转到安装向导
+  useEffect(() => {
+    if (isInstalled && !isSidecarLoading && sidecarStatus?.type === 'NotInstalled') {
+      navigate('/install')
+    }
+  }, [isInstalled, isSidecarLoading, sidecarStatus, navigate])
 
   // 正在自动安装时显示进度
   if (autoInstallMutation.isPending || (autoInstallStarted && !isInstalled)) {
