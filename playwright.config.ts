@@ -78,10 +78,12 @@ export default defineConfig({
   ],
 
   /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'npm run tauri:dev',
-    url: 'http://localhost:1420',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000, // 2 minutes
-  },
+  // Note: Disabled for local testing when dev server is already running
+  // Uncomment this for CI/CD where server needs to be started automatically
+  // webServer: {
+  //   command: 'RUSTC_WRAPPER="" npm run tauri:dev',
+  //   url: 'http://localhost:1420',
+  //   reuseExistingServer: !process.env.CI,
+  //   timeout: 300 * 1000,
+  // },
 });
