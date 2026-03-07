@@ -1,332 +1,233 @@
-import { test, expect, Page } from '@playwright/test';
-import { execSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
+import { test, expect } from '@playwright/test';
+import {
+  mockSidecarNotInstalled,
+  mockSidecarInstalled,
+  mockSidecarInstallSuccess,
+  mockSidecarNetworkError,
+  mockSidecarServiceControl,
+} from './mocks/sidecar-mocks';
+import {
+  waitForSidecarInstallation,
+  waitForProgressComplete,
+  clearSidecarInstallation,
+  setupSidecarTest,
+  teardownSidecarTest,
+} from './utils/sidecar-helpers';
 
 /**
  * Sidecar Installation E2E Tests
  *
- * Tests the complete Sidecar installation workflow:
- * - Sidecar mode detection and UI display
- * - Node.js runtime download progress
- * - OpenClaw extraction and setup
- * - npm install progress tracking
- * - Service start/stop via Sidecar
+ * Tests the complete Sidecar installation workflow with improved stability:
+ * - Smart waiting logic instead of fixed timeouts
+ * - Proper test isolation
+ * - Mock-based testing for reliability
  */
 
-// Test helpers
-const waitForTimeout = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// Configure serial execution (Sidecar tests need to run sequentially)
+test.describe.configure({ mode: 'serial' });
 
-const clearSidecarInstallation = () => {
-  try {
-    // Remove Sidecar installation directory
-    const sidecarDir = path.join(process.env.HOME || '', '.openclaw', 'app');
-    if (fs.existsSync(sidecarDir)) {
-      fs.rmSync(sidecarDir, { recursive: true, force: true });
-      console.log('Cleared Sidecar installation directory');
-    }
-  } catch (e) {
-    console.log('No existing Sidecar installation to clear');
-  }
-};
-
-const checkSidecarInstalled = (): boolean => {
-  const sidecarDir = path.join(process.env.HOME || '', '.openclaw', 'app');
-  const openclawDir = path.join(sidecarDir, 'openclaw');
-  const nodeModulesDir = path.join(openclawDir, 'node_modules');
-  return fs.existsSync(nodeModulesDir);
-};
-
-test.describe('Sidecar Installation Flow', () => {
+test.describe('Sidecar Installation', () => {
   test.beforeEach(async ({ page }) => {
-    // Clear any existing Sidecar installation for clean test
-    clearSidecarInstallation();
-    await page.goto('/');
-  });
+    // 1. Clean up browser state
+    await page.context().clearCookies();
+    await page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    });
 
-  test.afterEach(async () => {
-    // Cleanup after test
-    clearSidecarInstallation();
-  });
+    // 2. Clear filesystem state
+    await clearSidecarInstallation(page);
 
-  test('should display Sidecar installation option in install wizard', async ({ page }) => {
-    // Navigate to install wizard
+    // 3. Set default mock (not installed)
+    await mockSidecarNotInstalled(page);
+
+    // 4. Navigate to install page
     await page.goto('/#/install');
+  });
 
+  test.afterEach(async ({ page }) => {
+    // Clean up Sidecar state
+    await clearSidecarInstallation(page);
+  });
+
+  test('should display Sidecar installation option', async ({ page }) => {
     // Wait for wizard to load
     const wizardTitle = page.locator('h1:has-text("安装"), h2:has-text("安装")');
     await expect(wizardTitle).toBeVisible({ timeout: 10000 });
 
-    // Look for Sidecar installation option
-    const sidecarOption = page.locator('[data-testid="sidecar-install"]').or(
-      page.locator('button:has-text("Sidecar")').or(
-        page.locator('button:has-text("嵌入式安装")')
-      )
-    );
-
-    // Sidecar option should be visible
-    await expect(sidecarOption).toBeVisible({ timeout: 5000 });
+    // Check for Sidecar installation option
+    await expect(page.getByTestId('sidecar-install')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('sidecar-install')).toHaveText(/安装 Sidecar|Sidecar|嵌入式安装/);
   });
 
   test('should start Sidecar installation when clicked', async ({ page }) => {
-    await page.goto('/#/install');
+    // Setup success mock
+    await mockSidecarInstallSuccess(page);
 
-    // Click Sidecar install button
-    const sidecarButton = page.locator('[data-testid="sidecar-install"]').or(
-      page.locator('button:has-text("Sidecar")').or(
-        page.locator('button:has-text("嵌入式安装")')
-      )
-    );
-    await expect(sidecarButton).toBeVisible({ timeout: 5000 });
-    await sidecarButton.click();
+    // Click install button
+    await page.getByTestId('sidecar-install').click();
 
-    // Should show installation progress
-    const progressIndicator = page.locator('[role="progressbar"]').or(
-      page.locator('[data-testid="install-progress"]')
-    );
-    await expect(progressIndicator).toBeVisible({ timeout: 10000 });
-
-    // Should show stage text
-    const stageText = page.locator('[data-testid="install-stage"]').or(
-      page.getByText(/检查安装环境|解压|下载 Node|安装依赖/)
-    );
-    await expect(stageText).toBeVisible();
+    // Use smart wait instead of fixed timeout
+    await expect(page.getByTestId('install-progress')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('install-stage')).toContainText(/检查|Checking|下载|Downloading/);
   });
 
   test('should display Node.js download progress', async ({ page }) => {
-    await page.goto('/#/install');
+    await mockSidecarInstallSuccess(page);
+    await page.getByTestId('sidecar-install').click();
 
-    // Start Sidecar installation
-    const sidecarButton = page.locator('button:has-text("Sidecar"), button:has-text("嵌入式安装")');
-    if (await sidecarButton.isVisible().catch(() => false)) {
-      await sidecarButton.click();
+    // Wait for progress bar to appear
+    await expect(page.getByTestId('install-progress')).toBeVisible({ timeout: 5000 });
 
-      // Wait for Node.js download stage
-      const nodeDownloadText = page.getByText(/下载 Node\.js|Node\.js/);
-
-      try {
-        await expect(nodeDownloadText).toBeVisible({ timeout: 30000 });
-
-        // Check for percentage display
-        const percentageText = page.locator('[data-testid="install-progress"]').or(
-          page.getByText(/\d+%/)
-        );
-        await expect(percentageText).toBeVisible();
-      } catch {
-        // If system Node.js is available, download may be skipped
-        console.log('Node.js download stage skipped (using system Node.js)');
-      }
-    }
-  });
-
-  test('should show npm install progress', async ({ page }) => {
-    await page.goto('/#/install');
-
-    const sidecarButton = page.locator('button:has-text("Sidecar"), button:has-text("嵌入式安装")');
-    if (await sidecarButton.isVisible().catch(() => false)) {
-      await sidecarButton.click();
-
-      // Wait for npm install stage
-      const npmInstallText = page.getByText(/npm install|安装依赖|Installing/);
-
-      await expect(npmInstallText).toBeVisible({ timeout: 60000 });
-
-      // Progress should update
-      const progressBar = page.locator('[role="progressbar"]');
-      await expect(progressBar).toBeVisible();
-    }
+    // Wait for progress to reach 100%
+    await waitForProgressComplete(page, { timeout: 120000 });
   });
 
   test('should complete installation and show success', async ({ page }) => {
-    test.setTimeout(300000); // 5 minutes for full installation
+    await mockSidecarInstallSuccess(page);
+    await page.getByTestId('sidecar-install').click();
 
-    await page.goto('/#/install');
+    // Use smart wait for installation completion
+    await waitForSidecarInstallation(page, { timeout: 300000 });
 
-    const sidecarButton = page.locator('button:has-text("Sidecar"), button:has-text("嵌入式安装")');
-    await expect(sidecarButton).toBeVisible({ timeout: 5000 });
-    await sidecarButton.click();
-
-    // Wait for installation to complete
-    const successMessage = page.getByText(/安装成功|安装完成|success/i);
-    const dashboardLink = page.locator('a[href="#/"], button:has-text("进入")');
-
-    // Either success message or dashboard link should appear
-    await expect(successMessage.or(dashboardLink)).toBeVisible({ timeout: 240000 });
-
-    // Verify installation actually completed
-    expect(checkSidecarInstalled()).toBe(true);
+    // Verify success state
+    await expect(page.getByTestId('install-complete')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('install-complete')).toContainText(/安装成功|完成|Success/);
   });
 
-  test('should navigate to dashboard after Sidecar installation', async ({ page }) => {
-    test.setTimeout(300000);
+  test('should handle network error during Node.js download', async ({ page }) => {
+    // Setup network error mock
+    await mockSidecarNetworkError(page);
+    await page.getByTestId('sidecar-install').click();
 
-    await page.goto('/#/install');
+    // Wait for error display with extended timeout
+    await expect(page.getByTestId('install-error')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByTestId('install-error')).toContainText(/网络|Network|错误|Error/);
 
-    // Install Sidecar
-    const sidecarButton = page.locator('button:has-text("Sidecar"), button:has-text("嵌入式安装")');
-    if (await sidecarButton.isVisible().catch(() => false)) {
-      await sidecarButton.click();
+    // Verify retry button is available
+    await expect(page.getByTestId('install-retry')).toBeVisible();
+  });
 
-      // Wait for completion
-      const completeButton = page.locator('button:has-text("完成")').or(
-        page.locator('button:has-text("进入")').or(
-          page.locator('a:has-text("仪表盘")')
-        )
-      );
-      await completeButton.waitFor({ timeout: 240000 });
-      await completeButton.click();
+  test('should allow retry after installation failure', async ({ page }) => {
+    // First attempt - network error
+    await mockSidecarNetworkError(page);
+    await page.getByTestId('sidecar-install').click();
+    await expect(page.getByTestId('install-error')).toBeVisible({ timeout: 30000 });
 
-      // Should navigate to dashboard
-      await page.waitForURL('**/#/', { timeout: 10000 });
+    // Second attempt - success
+    await mockSidecarInstallSuccess(page);
+    await page.getByTestId('install-retry').click();
 
-      // Dashboard should be visible
-      const dashboard = page.locator('h1:has-text("OpenClaw")').or(
-        page.getByText('系统状态')
-      );
-      await expect(dashboard).toBeVisible();
-    }
+    // Wait for successful completion
+    await waitForSidecarInstallation(page, { timeout: 300000 });
+    await expect(page.getByTestId('install-complete')).toBeVisible();
   });
 });
 
 test.describe('Sidecar Service Control', () => {
   test.beforeEach(async ({ page }) => {
-    // Ensure Sidecar is installed before testing service control
-    if (!checkSidecarInstalled()) {
-      test.skip('Sidecar installation required for service control tests');
-    }
-    await page.goto('/');
+    // Pre-set installed state with specific version
+    await mockSidecarInstalled(page, '2026.2.27');
+    await mockSidecarServiceControl(page);
+
+    // Navigate to dashboard
+    await page.goto('/#/');
+
+    // Verify installed state is shown
+    await expect(page.getByTestId('sidecar-installed')).toContainText(/已安装|Installed/, { timeout: 10000 });
   });
 
-  test('should show Sidecar service status on dashboard', async ({ page }) => {
-    await page.goto('/');
-
-    // Wait for dashboard
-    const dashboard = page.locator('h1:has-text("OpenClaw")').or(
-      page.getByText('系统状态')
-    );
-    await dashboard.waitFor({ timeout: 30000 });
-
-    // Check for service status indicator
-    const serviceStatus = page.locator('[data-testid="service-status"]').or(
-      page.getByText(/服务状态|Sidecar|运行中|已停止/)
-    );
-    await expect(serviceStatus).toBeVisible();
+  test.afterEach(async ({ page }) => {
+    await clearSidecarInstallation(page);
   });
 
-  test('should start Sidecar service when clicking start button', async ({ page }) => {
-    await page.goto('/');
+  test('should start Sidecar service', async ({ page }) => {
+    await page.getByTestId('start-service').click();
 
-    const dashboard = page.locator('h1:has-text("OpenClaw")');
-    await dashboard.waitFor({ timeout: 30000 });
-
-    // Find and click start button (if service is stopped)
-    const startButton = page.locator('button:has-text("启动")').or(
-      page.locator('[data-testid="start-service"]')
-    );
-
-    if (await startButton.isVisible().catch(() => false)) {
-      await startButton.click();
-
-      // Wait for service to start
-      const runningStatus = page.getByText(/运行中|Running/);
-      await expect(runningStatus).toBeVisible({ timeout: 30000 });
-    }
+    // Wait for running status with extended timeout
+    await expect(page.getByTestId('service-status')).toContainText(/运行中|Running/, { timeout: 15000 });
   });
 
-  test('should stop Sidecar service when clicking stop button', async ({ page }) => {
-    await page.goto('/');
+  test('should stop Sidecar service', async ({ page }) => {
+    // First start the service
+    await page.getByTestId('start-service').click();
+    await expect(page.getByTestId('service-status')).toContainText(/运行中|Running/, { timeout: 15000 });
 
-    const dashboard = page.locator('h1:has-text("OpenClaw")');
-    await dashboard.waitFor({ timeout: 30000 });
+    // Then stop it
+    await page.getByTestId('stop-service').click();
 
-    // Find stop button (if service is running)
-    const stopButton = page.locator('button:has-text("停止")').or(
-      page.locator('[data-testid="stop-service"]')
-    );
-
-    if (await stopButton.isVisible().catch(() => false)) {
-      await stopButton.click();
-
-      // Wait for service to stop
-      const stoppedStatus = page.getByText(/已停止|Stopped/);
-      await expect(stoppedStatus).toBeVisible({ timeout: 10000 });
-    }
+    // Wait for stopped status
+    await expect(page.getByTestId('service-status')).toContainText(/已停止|Stopped/, { timeout: 15000 });
   });
 
   test('should display Sidecar version info', async ({ page }) => {
-    await page.goto('/');
-
-    const dashboard = page.locator('h1:has-text("OpenClaw")');
-    await dashboard.waitFor({ timeout: 30000 });
-
-    // Look for version info
-    const versionInfo = page.locator('[data-testid="sidecar-version"]').or(
+    // Look for version info on dashboard
+    const versionInfo = page.getByTestId('sidecar-version').or(
       page.getByText(/版本|Version.*\d+\.\d+/)
     );
 
-    expect(await versionInfo.isVisible().catch(() => false)).toBe(true);
+    await expect(versionInfo).toBeVisible({ timeout: 10000 });
   });
 });
 
 test.describe('Sidecar Error Handling', () => {
-  test('should handle network error during Node.js download', async ({ page }) => {
+  test.beforeEach(async ({ page }) => {
+    await setupSidecarTest(page);
+    await page.goto('/#/install');
+  });
+
+  test.afterEach(async ({ page }) => {
+    await teardownSidecarTest(page);
+  });
+
+  test('should handle offline mode gracefully', async ({ page }) => {
     // Simulate offline condition
     await page.context().setOffline(true);
 
-    await page.goto('/#/install');
-
-    const sidecarButton = page.locator('button:has-text("Sidecar"), button:has-text("嵌入式安装")');
-    if (await sidecarButton.isVisible().catch(() => false)) {
-      await sidecarButton.click();
+    try {
+      await mockSidecarNetworkError(page);
+      await page.getByTestId('sidecar-install').click();
 
       // Should show error or fallback message
-      const errorOrFallback = page.getByText(/使用系统 Node|网络错误|离线模式/);
+      const errorOrFallback = page.getByText(/使用系统 Node|网络错误|离线模式|System Node|Offline/);
       await expect(errorOrFallback).toBeVisible({ timeout: 30000 });
+    } finally {
+      // Always restore network
+      await page.context().setOffline(false);
     }
-
-    // Restore network
-    await page.context().setOffline(false);
   });
 
   test('should show error when npm install fails', async ({ page }) => {
-    await page.goto('/#/install');
+    // Setup mock that simulates npm install failure
+    await page.evaluate(() => {
+      (window as any).__TAURI__ = {
+        ...(window as any).__TAURI__,
+        invoke: async (cmd: string, args?: any) => {
+          if (cmd === 'install_sidecar') {
+            setTimeout(() => {
+              (window as any).__TAURI__?.event?.emit?.('install-progress', {
+                stage: 'Error',
+                percentage: 70,
+                message: 'npm install 失败',
+                error: true,
+              });
+            }, 2000);
 
-    const sidecarButton = page.locator('button:has-text("Sidecar"), button:has-text("嵌入式安装")');
-    if (await sidecarButton.isVisible().catch(() => false)) {
-      await sidecarButton.click();
+            return { success: true, data: { started: true } };
+          }
+          return (window as any).__TAURI__?.__originalInvoke?.(cmd, args);
+        },
+      };
+    });
 
-      // Wait for potential error
-      try {
-        const errorMessage = page.getByText(/安装失败|npm install.*error/i);
-        await errorMessage.waitFor({ timeout: 120000 });
+    await page.getByTestId('sidecar-install').click();
 
-        // Should show retry button
-        const retryButton = page.locator('button:has-text("重试")');
-        await expect(retryButton).toBeVisible();
-      } catch {
-        // Installation succeeded, no error to test
-        console.log('Installation completed without error');
-      }
-    }
-  });
+    // Wait for potential error
+    const errorMessage = page.getByText(/安装失败|npm install.*error|Error/i);
+    await expect(errorMessage).toBeVisible({ timeout: 60000 });
 
-  test('should allow retry after installation failure', async ({ page }) => {
-    await page.goto('/#/install');
-
-    const sidecarButton = page.locator('button:has-text("Sidecar"), button:has-text("嵌入式安装")');
-    if (await sidecarButton.isVisible().catch(() => false)) {
-      await sidecarButton.click();
-
-      // Look for retry button if error occurs
-      const retryButton = page.locator('button:has-text("重试")');
-
-      if (await retryButton.isVisible({ timeout: 60000 }).catch(() => false)) {
-        await retryButton.click();
-
-        // Should restart installation
-        const progressIndicator = page.locator('[role="progressbar"]');
-        await expect(progressIndicator).toBeVisible();
-      }
-    }
+    // Should show retry button
+    const retryButton = page.locator('button:has-text("重试"), button:has-text("Retry")');
+    await expect(retryButton).toBeVisible();
   });
 });

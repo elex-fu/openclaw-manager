@@ -26,6 +26,9 @@ import type {
   SkillCategory,
   SkillMarketItem,
   SkillSearchResult,
+  SidecarInstallStatus,
+  SidecarInstallResult,
+  SidecarInfo,
 } from '@/types';
 
 // ==================== Error Handling ====================
@@ -98,7 +101,6 @@ export async function invokeWithRetry<T>(
     maxRetries?: number;
     baseDelay?: number;
     maxDelay?: number;
-    timeoutMs?: number;
     signal?: AbortSignal;
   } = {}
 ): Promise<T> {
@@ -106,7 +108,6 @@ export async function invokeWithRetry<T>(
     maxRetries = 3,
     baseDelay = 1000,
     maxDelay = 30000,
-    timeoutMs,
     signal,
   } = options;
 
@@ -119,10 +120,7 @@ export async function invokeWithRetry<T>(
     }
 
     try {
-      // 如果指定了超时时间，使用超时包装调用
-      const response = timeoutMs
-        ? await invokeWithTimeout<ApiResponse<T>>(command, args, timeoutMs)
-        : await invoke<ApiResponse<T>>(command, args);
+      const response = await invoke<ApiResponse<T>>(command, args);
       return handleApiResponse(response);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
@@ -164,7 +162,7 @@ export async function invokeWithRetry<T>(
       );
 }
 
-// 带超时控制的调用函数（直接调用invoke，不经过retry）
+// 带超时控制的调用函数
 export async function invokeWithTimeout<T>(
   command: string,
   args?: Record<string, unknown>,
@@ -176,7 +174,7 @@ export async function invokeWithTimeout<T>(
     }, timeoutMs);
   });
 
-  const invokePromise = invoke<T>(command, args);
+  const invokePromise = invokeWithRetry<T>(command, args);
 
   return Promise.race([invokePromise, timeoutPromise]);
 }
@@ -363,71 +361,45 @@ export const openclawApi = {
       callback(event.payload);
     });
   },
-
-  // ==================== Sidecar 模式 API ====================
-  checkSidecarInstallation: () =>
-    invokeWithRetry<InstallStatus>('check_sidecar_installation', undefined, { maxRetries: 2 }),
-
-  installSidecar: () =>
-    invokeWithRetry<InstallResult>('install_openclaw_sidecar', undefined, { maxRetries: 1 }),
-
-  getSidecarVersion: () =>
-    invokeWithRetry<string>('get_sidecar_version', undefined, { maxRetries: 2 }),
 };
 
-// ==================== Service API (OpenClaw服务控制) ====================
+// ==================== Service API (新增) ====================
 export const serviceApi = {
   startService: () =>
-    invokeWithRetry<boolean>('start_openclaw_service', undefined, { maxRetries: 2 }),
+    invokeWithRetry<boolean>('start_service', undefined, { maxRetries: 2 }),
 
   stopService: () =>
-    invokeWithRetry<boolean>('stop_openclaw_service', undefined, { maxRetries: 2 }),
+    invokeWithRetry<boolean>('stop_service', undefined, { maxRetries: 2 }),
 
   getServiceStatus: () =>
-    invokeWithRetry<ServiceInfo>('get_openclaw_service_status', undefined, { maxRetries: 2 }),
+    invokeWithRetry<ServiceInfo>('get_service_status', undefined, { maxRetries: 2 }),
 
   healthCheck: () =>
-    invokeWithRetry<{ healthy: boolean; message?: string }>('health_check_openclaw_service', undefined, { maxRetries: 1 }),
-
-  // ==================== Sidecar 服务控制 ====================
-  startSidecar: () =>
-    invokeWithRetry<number>('start_sidecar_service', undefined, { maxRetries: 2 }),
-
-  stopSidecar: () =>
-    invokeWithRetry<void>('stop_sidecar_service', undefined, { maxRetries: 2 }),
-
-  getSidecarState: () =>
-    invokeWithRetry<{ type: string; pid?: number; message?: string }>('get_sidecar_state', undefined, { maxRetries: 2 }),
-
-  restartSidecar: () =>
-    invokeWithRetry<number>('restart_sidecar_service', undefined, { maxRetries: 2 }),
-
-  executeSidecarCommand: (command: string, args?: string[]) =>
-    invokeWithRetry<string>('execute_sidecar_command', { command, args }, { maxRetries: 2 }),
+    invokeWithRetry<{ healthy: boolean; message?: string }>('health_check', undefined, { maxRetries: 1 }),
 };
 
 // ==================== Secure Storage API (新增) ====================
 export const secureStorageApi = {
   saveApiKey: (provider: string, apiKey: string) =>
-    invokeWithRetry<void>('save_api_key', { provider, apiKey }, { maxRetries: 2 }),
+    invokeWithRetry<void>('save_model_api_key', { provider, apiKey }, { maxRetries: 2 }),
 
   getApiKey: (provider: string) =>
-    invokeWithRetry<string | null>('get_api_key', { provider }, { maxRetries: 2 }),
+    invokeWithRetry<string | null>('get_model_api_key', { provider }, { maxRetries: 2 }),
 
   deleteApiKey: (provider: string) =>
-    invokeWithRetry<void>('delete_api_key', { provider }, { maxRetries: 2 }),
+    invokeWithRetry<void>('delete_model_api_key', { provider }, { maxRetries: 2 }),
 
   hasApiKey: (provider: string) =>
-    invokeWithRetry<boolean>('has_api_key', { provider }, { maxRetries: 2 }),
+    invokeWithRetry<boolean>('has_model_api_key', { provider }, { maxRetries: 2 }),
 };
 
 // ==================== Model API (新增) ====================
 export const modelApi = {
   getAllModels: () =>
-    invokeWithRetry<ModelConfig[]>('get_all_models_full', undefined, { maxRetries: 2 }),
+    invokeWithRetry<ModelConfig[]>('get_all_models', undefined, { maxRetries: 2 }),
 
   saveModel: (model: ModelConfig) =>
-    invokeWithRetry<ModelConfig>('save_model_full', { model }, { maxRetries: 2 }),
+    invokeWithRetry<ModelConfig>('save_model', { model }, { maxRetries: 2 }),
 
   deleteModel: (id: string) =>
     invokeWithRetry<boolean>('delete_model', { id }, { maxRetries: 2 }),
@@ -438,7 +410,6 @@ export const modelApi = {
   testModelConnection: (modelId: string) =>
     invokeWithRetry<{ success: boolean; latency: number; message?: string }>('test_model_connection', { modelId }, {
       maxRetries: 1,
-      timeoutMs: 30000, // 30秒超时用于连接测试
     }),
 
   reorderModels: (modelIds: string[]) =>
@@ -473,6 +444,101 @@ export const diagnosticsApi = {
 
   fixIssue: (issueName: string) =>
     invokeWithRetry<boolean>('fix_issue', { issueName }, { maxRetries: 1 }),
+};
+
+// ==================== File API (废弃但保留向后兼容) ====================
+export interface FileItem {
+  id: string;
+  file_name: string;
+  file_path: string;
+  file_type: string;
+  file_size: number;
+  description?: string;
+  tags?: string;
+  is_collected: boolean;
+  is_classified: boolean;
+  classification?: string;
+  custom_attributes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FileScanRequest {
+  path: string;
+  recursive: boolean;
+  file_types?: string[];
+}
+
+export interface FileScanResult {
+  files: FileItem[];
+  total_count: number;
+  total_size: number;
+}
+
+export const fileApi = {
+  scan: (req: FileScanRequest) =>
+    invokeWithRetry<FileScanResult>('scan_files', { req }, { maxRetries: 1 }),
+  getAll: (params?: {
+    file_type?: string;
+    is_collected?: boolean;
+    is_classified?: boolean;
+    limit?: number;
+    offset?: number;
+  }) => invokeWithRetry<FileItem[]>('get_files', params || {}, { maxRetries: 2 }),
+  getById: (id: string) =>
+    invokeWithRetry<FileItem | null>('get_file_by_id', { id }, { maxRetries: 2 }),
+  update: (id: string, data: Partial<FileItem>) =>
+    invokeWithRetry<FileItem>('update_file', {
+      req: { id, ...data },
+    }, { maxRetries: 2 }),
+  delete: (id: string) =>
+    invokeWithRetry<boolean>('delete_file', { id }, { maxRetries: 2 }),
+  parse: (fileName: string) =>
+    invokeWithRetry<{ file_name: string; parsed_data: unknown }>('parse_file_info', {
+      fileName,
+    }, { maxRetries: 2 }),
+};
+
+// ==================== Group API (废弃但保留向后兼容) ====================
+export interface Group {
+  id: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  sort_order: number;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GroupWithFiles extends Group {
+  files: FileItem[];
+  file_count: number;
+}
+
+export const groupApi = {
+  getAll: (withFiles?: boolean) =>
+    invokeWithRetry<GroupWithFiles[]>('get_groups', { withFiles }, { maxRetries: 2 }),
+  create: (name: string, description?: string, icon?: string, color?: string) =>
+    invokeWithRetry<Group>('create_group', {
+      req: { name, description, icon, color },
+    }, { maxRetries: 2 }),
+  update: (id: string, data: Partial<Group>) =>
+    invokeWithRetry<Group>('update_group', {
+      req: { id, ...data },
+    }, { maxRetries: 2 }),
+  delete: (id: string) =>
+    invokeWithRetry<boolean>('delete_group', { id }, { maxRetries: 2 }),
+  addFile: (groupId: string, fileId: string) =>
+    invokeWithRetry<boolean>('add_file_to_group', {
+      req: { group_id: groupId, file_id: fileId },
+    }, { maxRetries: 2 }),
+  removeFile: (groupId: string, fileId: string) =>
+    invokeWithRetry<boolean>('remove_file_from_group', {
+      groupId,
+      fileId,
+    }, { maxRetries: 2 }),
 };
 
 // ==================== Log API ====================
@@ -700,6 +766,36 @@ export const skillApi = {
       skillId,
       currentVersion,
     }, { maxRetries: 2 }),
+};
+
+// ==================== Sidecar API ====================
+export const sidecarApi = {
+  /** 检查 Sidecar 安装状态 */
+  checkSidecarInstallation: () =>
+    invokeWithRetry<SidecarInstallStatus>('check_sidecar_installation', undefined, { maxRetries: 2 }),
+
+  /** 安装 Sidecar */
+  installSidecar: () =>
+    invokeWithRetry<SidecarInstallResult>('install_sidecar', undefined, { maxRetries: 1 }),
+
+  /** 启动 Sidecar */
+  startSidecar: () =>
+    invokeWithRetry<boolean>('start_sidecar', undefined, { maxRetries: 2 }),
+
+  /** 停止 Sidecar */
+  stopSidecar: () =>
+    invokeWithRetry<boolean>('stop_sidecar', undefined, { maxRetries: 2 }),
+
+  /** 获取 Sidecar 信息 */
+  getSidecarInfo: () =>
+    invokeWithRetry<SidecarInfo>('get_sidecar_info', undefined, { maxRetries: 2 }),
+
+  /** 监听 Sidecar 安装进度 */
+  onSidecarInstallProgress: (callback: (progress: InstallProgress) => void): Promise<UnlistenFn> => {
+    return listen<InstallProgress>('sidecar-install-progress', (event) => {
+      callback(event.payload);
+    });
+  },
 };
 
 // ==================== Network Status ====================

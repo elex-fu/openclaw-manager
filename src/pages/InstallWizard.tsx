@@ -1,26 +1,31 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   CheckCircle,
   Settings,
   ArrowRight,
   ArrowLeft,
   Loader2,
-  Sparkles
+  Sparkles,
+  Package,
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react'
-import { openclawApi } from '@/lib/tauri-api'
+import { openclawApi, sidecarApi } from '@/lib/tauri-api'
 import { useInstallStore } from '@/stores/installStore'
 import { useAppStore } from '@/stores/appStore'
-import type { InstallStage } from '@/types'
+import type { InstallStage, InstallProgress } from '@/types'
 
 const steps = [
   { id: 'install', title: '初始化', description: '解压运行环境' },
+  { id: 'sidecar', title: 'Sidecar', description: '安装 Sidecar 组件' },
   { id: 'config', title: '初始配置', description: '配置模型' },
 ]
 
@@ -37,6 +42,86 @@ export function InstallWizard() {
     setProgress,
     reset
   } = useInstallStore()
+
+  // Sidecar 安装状态
+  const [sidecarProgress, setSidecarProgress] = useState<InstallProgress | null>(null)
+  const [sidecarError, setSidecarError] = useState<string | null>(null)
+
+  // 查询 Sidecar 安装状态
+  const { data: sidecarStatus } = useQuery({
+    queryKey: ['sidecar-installation'],
+    queryFn: () => sidecarApi.checkSidecarInstallation(),
+    enabled: currentStep >= 1,
+  })
+
+  // Sidecar 安装 mutation
+  const sidecarInstallMutation = useMutation({
+    mutationFn: () => sidecarApi.installSidecar(),
+    onMutate: () => {
+      addLog('🚀 开始安装 Sidecar...', 'info')
+      setSidecarError(null)
+      setSidecarProgress({
+        stage: 'Installing',
+        percentage: 0,
+        message: '准备安装 Sidecar...'
+      })
+    },
+    onSuccess: (result) => {
+      if (result.success) {
+        addLog(`🎉 Sidecar 安装成功: ${result.message}`, 'success')
+        queryClient.invalidateQueries({ queryKey: ['sidecar-installation'] })
+        addNotification({
+          title: 'Sidecar 安装完成',
+          message: 'Sidecar 组件已成功安装',
+          type: 'success',
+        })
+        setCurrentStep(2) // 自动进入配置步骤
+      } else {
+        const errorMsg = result.message || 'Sidecar 安装失败'
+        addLog(`Sidecar 安装失败: ${errorMsg}`, 'error')
+        setSidecarError(errorMsg)
+        addNotification({
+          title: 'Sidecar 安装失败',
+          message: errorMsg,
+          type: 'error',
+        })
+      }
+    },
+    onError: (error) => {
+      const errorMsg = String(error)
+      addLog(`Sidecar 安装错误: ${errorMsg}`, 'error')
+      setSidecarError(errorMsg)
+      addNotification({
+        title: 'Sidecar 安装错误',
+        message: errorMsg,
+        type: 'error',
+      })
+    },
+  })
+
+  // 监听 Sidecar 安装进度
+  useEffect(() => {
+    let unlisten: (() => void) | undefined
+
+    const setupListener = async () => {
+      unlisten = await sidecarApi.onSidecarInstallProgress((prog) => {
+        setSidecarProgress({
+          stage: prog.stage,
+          percentage: prog.percentage,
+          message: prog.message,
+        })
+        addLog(prog.message, 'info')
+      })
+    }
+
+    setupListener()
+
+    return () => {
+      if (unlisten) {
+        unlisten()
+      }
+    }
+  }, [addLog])
 
   // 一键自动安装
   const installOneClickMutation = useMutation({
@@ -186,14 +271,111 @@ export function InstallWizard() {
           </div>
         )
 
-      case 1: // 初始配置
+      case 1: // Sidecar 安装
+        return (
+          <div className="space-y-6" data-testid="sidecar-install-step">
+            <div className="text-center space-y-2">
+              <div className="w-16 h-16 mx-auto bg-primary/10 rounded-full flex items-center justify-center">
+                <Package className="w-8 h-8 text-primary" />
+              </div>
+              <h3 className="text-lg font-medium">安装 Sidecar 组件</h3>
+              <p className="text-sm text-muted-foreground">
+                Sidecar 是 OpenClaw 的核心运行组件，需要单独安装
+              </p>
+            </div>
+
+            {/* 未安装状态 */}
+            {sidecarStatus?.type === 'NotInstalled' && !sidecarInstallMutation.isPending && !sidecarProgress && (
+              <div className="flex justify-center">
+                <Button
+                  data-testid="sidecar-install"
+                  size="lg"
+                  onClick={() => sidecarInstallMutation.mutate()}
+                  disabled={sidecarInstallMutation.isPending}
+                >
+                  {sidecarInstallMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      安装中...
+                    </>
+                  ) : (
+                    <>
+                      <Package className="mr-2 h-4 w-4" />
+                      安装 Sidecar
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {/* 安装中状态 */}
+            {(sidecarInstallMutation.isPending || sidecarProgress) && (
+              <div data-testid="install-progress" className="space-y-4">
+                <div className="space-y-2">
+                  <Progress value={sidecarProgress?.percentage || 0} className="h-2" />
+                  <div className="flex justify-between text-sm">
+                    <span data-testid="install-stage" className="text-muted-foreground">
+                      {sidecarProgress?.stage || 'Installing'}
+                    </span>
+                    <span>{Math.round(sidecarProgress?.percentage || 0)}%</span>
+                  </div>
+                </div>
+                <p className="text-sm text-center text-muted-foreground">
+                  {sidecarProgress?.message || '正在安装 Sidecar...'}
+                </p>
+                <div className="flex justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              </div>
+            )}
+
+            {/* 安装完成 */}
+            {sidecarStatus?.type === 'Installed' && !sidecarInstallMutation.isPending && (
+              <div data-testid="install-complete" className="text-center space-y-2">
+                <CheckCircle className="h-12 w-12 text-green-500 mx-auto" />
+                <p className="text-green-600 font-medium">Sidecar 安装成功</p>
+                <p className="text-sm text-muted-foreground">
+                  版本: {sidecarStatus.version}
+                </p>
+              </div>
+            )}
+
+            {/* 错误状态 */}
+            {sidecarError && (
+              <Alert data-testid="install-error" variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>安装失败</AlertTitle>
+                <AlertDescription>{sidecarError}</AlertDescription>
+              </Alert>
+            )}
+
+            {/* 重试按钮 */}
+            {sidecarError && (
+              <div className="flex justify-center">
+                <Button
+                  data-testid="install-retry"
+                  variant="outline"
+                  onClick={() => {
+                    setSidecarError(null)
+                    sidecarInstallMutation.mutate()
+                  }}
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  重试安装
+                </Button>
+              </div>
+            )}
+          </div>
+        )
+
+      case 2: // 初始配置
         return (
           <div className="space-y-4">
             <div className="text-center space-y-2">
               <CheckCircle className="h-16 w-16 text-green-500 mx-auto" />
               <h3 className="text-xl font-medium">初始化成功！</h3>
               <p className="text-muted-foreground">
-                OpenClaw 已成功初始化。您可以现在进行初始配置，或稍后在设置中配置。
+                OpenClaw 和 Sidecar 已成功初始化。您可以现在进行初始配置，或稍后在设置中配置。
               </p>
             </div>
 
@@ -297,7 +479,7 @@ export function InstallWizard() {
         <Button
           variant="outline"
           onClick={handleBack}
-          disabled={currentStep === 0 || installOneClickMutation.isPending}
+          disabled={currentStep === 0 || installOneClickMutation.isPending || sidecarInstallMutation.isPending}
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
           上一步
@@ -306,7 +488,11 @@ export function InstallWizard() {
         {currentStep < steps.length - 1 && (
           <Button
             onClick={handleNext}
-            disabled={currentStep === 0 && !installOneClickMutation.isSuccess}
+            disabled={
+              (currentStep === 0 && !installOneClickMutation.isSuccess) ||
+              (currentStep === 1 && sidecarStatus?.type !== 'Installed') ||
+              sidecarInstallMutation.isPending
+            }
           >
             下一步
             <ArrowRight className="ml-2 h-4 w-4" />

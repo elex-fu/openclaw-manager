@@ -5,15 +5,12 @@ export interface ApiResponse<T> {
 }
 
 // 页面路由类型
-export type AppPage =
-  | 'dashboard'
-  | 'install-wizard'
-  | 'model-config'
-  | 'agent-manager'
-  | 'skills'
-  | 'logs'
-  | 'update'
-  | 'diagnostics'
+export type AppPage = 
+  | 'dashboard' 
+  | 'install-wizard' 
+  | 'model-config' 
+  | 'agent-manager' 
+  | 'diagnostics' 
   | 'settings';
 
 // 通知类型
@@ -33,7 +30,6 @@ export type InstallStatus =
   | { type: 'NotInstalled' }
   | { type: 'Installing'; stage: string; progress: number }
   | { type: 'Installed'; version: string }
-  | { type: 'NeedsDependencies' }
   | { type: 'Error'; message: string };
 
 export interface InstallResult {
@@ -469,6 +465,16 @@ export interface SkillMarketItem {
   has_update: boolean;
 }
 
+export interface ToggleSkillRequest {
+  skill_id: string;
+  enabled: boolean;
+}
+
+export interface UpdateSkillConfigRequest {
+  skill_id: string;
+  config: Record<string, unknown>;
+}
+
 // 技能卡片通用属性接口
 export interface SkillCardItem {
   id: string;
@@ -483,12 +489,23 @@ export interface SkillCardItem {
   downloads: number;
 }
 
-export interface ToggleSkillRequest {
-  skill_id: string;
-  enabled: boolean;
+// ==================== Sidecar Types ====================
+
+export type SidecarInstallStatus =
+  | { type: 'NotInstalled' }
+  | { type: 'Installing'; stage: string; progress: number }
+  | { type: 'Installed'; version: string; path: string }
+  | { type: 'Error'; message: string };
+
+export interface SidecarInstallResult {
+  success: boolean;
+  version: string | null;
+  message: string;
 }
 
-export interface UpdateSkillConfigRequest {
-  skill_id: string;
-  config: Record<string, unknown>;
+export interface SidecarInfo {
+  version: string;
+  path: string;
+  isRunning: boolean;
+  pid?: number;
 }

@@ -93,12 +93,13 @@ describe('tauri-api', () => {
       expect(mockInvoke).toHaveBeenCalledTimes(3) // initial + 2 retries
     })
 
-    it('should use timeoutMs option when provided', async () => {
+    it('should use maxRetries option when provided', async () => {
       const mockData = { success: true, data: 'result', error: null }
       mockInvoke.mockResolvedValue(mockData)
 
-      const result = await invokeWithRetry('test_command', {}, { timeoutMs: 5000 })
+      const result = await invokeWithRetry('test_command', {}, { maxRetries: 2 })
       expect(result).toBe('result')
+      expect(mockInvoke).toHaveBeenCalledTimes(1)
     })
   })
 
