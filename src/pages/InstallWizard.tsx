@@ -331,12 +331,24 @@ export function InstallWizard() {
 
             {/* 安装完成 */}
             {sidecarStatus?.type === 'Installed' && !sidecarInstallMutation.isPending && (
-              <div data-testid="install-complete" className="text-center space-y-2">
-                <CheckCircle className="h-12 w-12 text-green-500 mx-auto" />
-                <p className="text-green-600 font-medium">Sidecar 安装成功</p>
-                <p className="text-sm text-muted-foreground">
-                  版本: {sidecarStatus.version}
-                </p>
+              <div data-testid="install-complete" className="text-center space-y-4">
+                <div className="w-20 h-20 mx-auto bg-green-100 rounded-full flex items-center justify-center">
+                  <CheckCircle className="h-10 w-10 text-green-600" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-lg font-semibold text-green-600">安装成功！</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Sidecar 组件已安装完成，版本: {sidecarStatus.version}
+                  </p>
+                </div>
+                <Button
+                  size="lg"
+                  onClick={() => setCurrentStep(2)}
+                  className="mt-4"
+                >
+                  继续下一步
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
               </div>
             )}
 
