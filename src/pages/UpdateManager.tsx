@@ -184,12 +184,8 @@ export function UpdateManager() {
 
     try {
       await updateApi.restoreFromBackup(backupPath);
-      if (response.success) {
-        setSuccessMessage('从备份恢复成功！');
-        await checkForUpdates();
-      } else {
-        setError(response.error || '恢复备份失败');
-      }
+      setSuccessMessage('从备份恢复成功！');
+      await checkForUpdates();
     } catch (e) {
       setError(e instanceof Error ? e.message : '恢复备份时出错');
     } finally {

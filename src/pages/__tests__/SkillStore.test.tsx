@@ -1,7 +1,9 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SkillStore } from '../SkillStore'
+import { SkillCard } from '@/components/skill/SkillCard'
+import { InstalledSkillList } from '@/components/skill/InstalledSkillList'
 import * as tauriApi from '@/lib/tauri-api'
 import type { Skill, InstalledSkill, SkillCategory, SkillSearchResult } from '@/types'
 
@@ -102,26 +104,10 @@ const renderWithQueryClient = (ui: React.ReactElement) => {
 describe('SkillStore', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(tauriApi.skillApi.getCategories).mockResolvedValue({
-      success: true,
-      data: mockCategories,
-      error: null,
-    })
-    vi.mocked(tauriApi.skillApi.searchMarket).mockResolvedValue({
-      success: true,
-      data: mockSearchResult,
-      error: null,
-    })
-    vi.mocked(tauriApi.skillApi.getAll).mockResolvedValue({
-      success: true,
-      data: mockInstalledSkills,
-      error: null,
-    })
-    vi.mocked(tauriApi.skillApi.getPopular).mockResolvedValue({
-      success: true,
-      data: [],
-      error: null,
-    })
+    vi.mocked(tauriApi.skillApi.getCategories).mockResolvedValue(mockCategories)
+    vi.mocked(tauriApi.skillApi.searchMarket).mockResolvedValue(mockSearchResult)
+    vi.mocked(tauriApi.skillApi.getAll).mockResolvedValue(mockInstalledSkills)
+    vi.mocked(tauriApi.skillApi.getPopular).mockResolvedValue([])
   })
 
   it('renders skill store page', async () => {
@@ -195,8 +181,6 @@ describe('SkillStore', () => {
 
 describe('SkillCard', () => {
   it('renders skill information correctly', () => {
-    const { SkillCard } = require('@/components/skill/SkillCard')
-
     render(<SkillCard skill={mockSkills[0]} />)
 
     expect(screen.getByText('代码助手')).toBeInTheDocument()
@@ -205,16 +189,12 @@ describe('SkillCard', () => {
   })
 
   it('shows installed status when skill is installed', () => {
-    const { SkillCard } = require('@/components/skill/SkillCard')
-
     render(<SkillCard skill={mockSkills[0]} isInstalled={true} isEnabled={true} />)
 
     expect(screen.getByText('已启用')).toBeInTheDocument()
   })
 
   it('shows install button when skill is not installed', () => {
-    const { SkillCard } = require('@/components/skill/SkillCard')
-
     render(<SkillCard skill={mockSkills[0]} isInstalled={false} />)
 
     expect(screen.getByText('安装')).toBeInTheDocument()
@@ -223,16 +203,12 @@ describe('SkillCard', () => {
 
 describe('InstalledSkillList', () => {
   it('renders empty state when no skills installed', () => {
-    const { InstalledSkillList } = require('@/components/skill/InstalledSkillList')
-
     render(<InstalledSkillList skills={[]} onToggle={vi.fn()} onConfig={vi.fn()} onUninstall={vi.fn()} />)
 
     expect(screen.getByText('暂无已安装技能')).toBeInTheDocument()
   })
 
   it('renders installed skills', () => {
-    const { InstalledSkillList } = require('@/components/skill/InstalledSkillList')
-
     render(
       <InstalledSkillList
         skills={mockInstalledSkills}

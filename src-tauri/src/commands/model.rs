@@ -22,7 +22,8 @@ pub async fn test_model_connection(
         .ok_or_else(|| format!("模型 {} 不存在", model_id))?;
 
     // 获取 API Key
-    let api_key = SecureStorage::get_api_key(&model.provider)
+    let storage = SecureStorage::global().map_err(|e| format!("安全存储初始化失败: {}", e))?;
+    let api_key = storage.get_api_key(&model.provider)
         .map_err(|e| format!("无法获取 API Key: {}", e))?
         .ok_or_else(|| "API Key 未设置".to_string())?;
 
@@ -244,6 +245,117 @@ pub async fn save_model_full(
     Ok(crate::models::openclaw::ApiResponse {
         success: true,
         data: Some(model),
+        error: None,
+    })
+}
+
+/// 删除模型配置
+#[tauri::command]
+pub async fn delete_model(
+    id: String,
+    config_manager: State<'_, Arc<ConfigManager>>,
+) -> Result<crate::models::openclaw::ApiResponse<bool>, String> {
+    // 先检查模型是否存在
+    let models = config_manager
+        .get_models_full()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !models.iter().any(|m| m.id == id) {
+        return Ok(crate::models::openclaw::ApiResponse {
+            success: false,
+            data: None,
+            error: Some(format!("模型 {} 不存在", id)),
+        });
+    }
+
+    // 检查是否是唯一的默认模型
+    let default_models: Vec<_> = models.iter().filter(|m| m.default).collect();
+    let is_target_default = models.iter().any(|m| m.id == id && m.default);
+
+    if is_target_default && default_models.len() == 1 {
+        return Ok(crate::models::openclaw::ApiResponse {
+            success: false,
+            data: None,
+            error: Some("不能删除唯一的默认模型，请先设置其他模型为默认".to_string()),
+        });
+    }
+
+    config_manager
+        .remove_model(&id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(crate::models::openclaw::ApiResponse {
+        success: true,
+        data: Some(true),
+        error: None,
+    })
+}
+
+/// 设置默认模型
+#[tauri::command]
+pub async fn set_default_model(
+    id: String,
+    config_manager: State<'_, Arc<ConfigManager>>,
+) -> Result<crate::models::openclaw::ApiResponse<bool>, String> {
+    let models = config_manager
+        .get_models_full()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 检查模型是否存在
+    if !models.iter().any(|m| m.id == id) {
+        return Ok(crate::models::openclaw::ApiResponse {
+            success: false,
+            data: None,
+            error: Some(format!("模型 {} 不存在", id)),
+        });
+    }
+
+    // 更新所有模型的default状态
+    config_manager
+        .update_partial(|state| {
+            for model in &mut state.models_full {
+                model.default = model.id == id;
+            }
+            // 同步简化版模型列表
+            state.models.iter_mut().for_each(|m| {
+                m.default = m.id == id;
+            });
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(crate::models::openclaw::ApiResponse {
+        success: true,
+        data: Some(true),
+        error: None,
+    })
+}
+
+/// 重新排序模型（适配前端参数格式）
+#[tauri::command]
+pub async fn reorder_models(
+    model_ids: Vec<String>,
+    config_manager: State<'_, Arc<ConfigManager>>,
+) -> Result<crate::models::openclaw::ApiResponse<bool>, String> {
+    // 将model_ids转换为带优先级的元组列表
+    // 索引越小，优先级越高（数值越小）
+    let model_orders: Vec<(String, i32)> = model_ids
+        .into_iter()
+        .enumerate()
+        .map(|(idx, id)| (id, idx as i32))
+        .collect();
+
+    config_manager
+        .update_model_priorities(model_orders)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(crate::models::openclaw::ApiResponse {
+        success: true,
+        data: Some(true),
         error: None,
     })
 }

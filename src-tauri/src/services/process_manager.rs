@@ -117,7 +117,7 @@ impl ProcessManager {
     /// 创建新的进程管理器
     pub fn new() -> Self {
         let (event_sender, _) = broadcast::channel(100);
-        
+
         Self {
             services: Arc::new(RwLock::new(HashMap::new())),
             event_sender,
@@ -144,7 +144,7 @@ impl ProcessManager {
             }
         }
 
-        log::info!("Starting service '{}' with command: {} {:?}", 
+        log::info!("Starting service '{}' with command: {} {:?}",
             name, request.command, request.args);
 
         // 更新状态
@@ -240,30 +240,12 @@ impl ProcessManager {
             })
             .ok();
 
-        // 发送优雅关闭信号
-        #[cfg(unix)]
-        {
-            use nix::sys::signal::{self, Signal};
-            use nix::unistd::Pid;
+        let pid = handle.process.id().ok_or_else(|| {
+            ProcessError::StopFailed("Failed to get process ID".to_string())
+        })?;
 
-            if let Some(pid) = handle.process.id() {
-                log::info!("Sending SIGTERM to process {}", pid);
-                signal::kill(Pid::from_raw(pid as i32), Signal::SIGTERM).ok();
-            }
-        }
-
-        #[cfg(windows)]
-        {
-            // Windows: 使用 taskkill /T /PID
-            if let Some(pid) = handle.process.id() {
-                let _ = Command::new("taskkill")
-                    .args([&"/T".to_string(),
-                        "/PID".to_string(),
-                        pid.to_string(),
-                    ])
-                    .spawn();
-            }
-        }
+        // 使用平台特定的优雅关闭实现
+        let shutdown_result = platform::graceful_shutdown(pid, timeout_secs).await;
 
         let shutdown_tx = handle.shutdown_tx.clone();
         drop(services);
@@ -289,7 +271,7 @@ impl ProcessManager {
             .send(ProcessEvent::Stopped { name: name.to_string() })
             .ok();
 
-        Ok(())
+        shutdown_result
     }
 
     /// 强制终止服务
@@ -367,7 +349,7 @@ impl ProcessManager {
             handle.info.health_check_path.as_ref(),
         ) {
             let url = format!("http://127.0.0.1:{}{}", port, path);
-            
+
             match timeout(
                 Duration::from_secs(5),
                 reqwest::get(&url)
@@ -375,7 +357,7 @@ impl ProcessManager {
                 Ok(Ok(response)) => {
                     let response_time = start_time.elapsed().as_millis() as u64;
                     let healthy = response.status().is_success();
-                    
+
                     return Ok(HealthStatus {
                         healthy,
                         message: if healthy {
@@ -443,7 +425,7 @@ impl ProcessManager {
                     }
                     _ = check_interval.tick() => {
                         let mut services = services.write().await;
-                        
+
                         if let Some(handle) = services.get_mut(&name) {
                             match handle.process.try_wait() {
                                 Ok(Some(status)) => {
@@ -461,7 +443,7 @@ impl ProcessManager {
                                             exit_code: Some(exit_code),
                                         })
                                         .ok();
-                                    
+
                                     services.remove(&name);
                                     break;
                                 }
@@ -497,7 +479,7 @@ impl ProcessManager {
             if let Some(stdout) = stdout {
                 let sender = event_sender.clone();
                 let service_name = name.clone();
-                
+
                 tokio::spawn(async move {
                     let reader = BufReader::new(stdout);
                     let mut lines = reader.lines();
@@ -518,7 +500,7 @@ impl ProcessManager {
             if let Some(stderr) = stderr {
                 let sender = event_sender.clone();
                 let service_name = name.clone();
-                
+
                 tokio::spawn(async move {
                     let reader = BufReader::new(stderr);
                     let mut lines = reader.lines();
@@ -550,4 +532,333 @@ fn current_timestamp() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+}
+
+/// 平台特定的进程管理实现
+mod platform {
+    use super::*;
+
+    /// 优雅关闭进程
+    ///
+    /// 实现三级关闭策略：
+    /// 1. 发送优雅关闭信号（Ctrl+Break/WM_CLOSE 或 SIGTERM）
+    /// 2. 等待进程退出（带超时）
+    /// 3. 强制终止
+    pub async fn graceful_shutdown(pid: u32, timeout_secs: u64) -> Result<(), AppError> {
+        #[cfg(windows)]
+        {
+            windows_process::graceful_shutdown(pid, timeout_secs).await
+        }
+        #[cfg(unix)]
+        {
+            unix_process::graceful_shutdown(pid, timeout_secs).await
+        }
+        #[cfg(not(any(windows, unix)))]
+        {
+            Err(ProcessError::StopFailed("Unsupported platform".to_string()).into())
+        }
+    }
+}
+
+/// Windows 平台进程管理实现
+#[cfg(windows)]
+mod windows_process {
+    use super::*;
+    use std::os::windows::process::CommandExt;
+    use std::process::Command;
+    use std::thread;
+    use std::time::Duration;
+    use windows_sys::Win32::Foundation::{BOOL, FALSE, HWND, LPARAM, TRUE, WPARAM};
+    use windows_sys::Win32::System::Console::{AttachConsole, FreeConsole, GenerateConsoleCtrlEvent, SetConsoleCtrlHandler, CTRL_BREAK_EVENT};
+    use windows_sys::Win32::System::Threading::GetCurrentProcessId;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId, PostMessageW, WM_CLOSE};
+
+    /// Windows 优雅关闭三级策略：
+    /// 1. Ctrl+Break 信号
+    /// 2. WM_CLOSE 消息
+    /// 3. 强制终止 (taskkill /F /T)
+    pub async fn graceful_shutdown(pid: u32, timeout_secs: u64) -> Result<(), AppError> {
+        log::info!("Attempting graceful shutdown for PID {}", pid);
+
+        // 方案1: Ctrl+Break 信号
+        log::info!("Phase 1: Sending Ctrl+Break to PID {}", pid);
+        if send_ctrl_break(pid) {
+            if wait_for_exit(pid, timeout_secs / 3).await {
+                log::info!("Process {} exited after Ctrl+Break", pid);
+                return Ok(());
+            }
+        }
+
+        // 方案2: WM_CLOSE 消息
+        log::info!("Phase 2: Sending WM_CLOSE to PID {}", pid);
+        if send_wm_close(pid) {
+            if wait_for_exit(pid, timeout_secs / 3).await {
+                log::info!("Process {} exited after WM_CLOSE", pid);
+                return Ok(());
+            }
+        }
+
+        // 方案3: 强制终止
+        log::warn!("Phase 3: Force terminating PID {}", pid);
+        force_terminate(pid).await
+    }
+
+    /// 发送 Ctrl+Break 信号到指定进程
+    ///
+    /// 注意：这是 unsafe 操作，需要正确附加到目标进程的控制台
+    unsafe fn send_ctrl_break_internal(pid: u32) -> bool {
+        // 先禁用当前进程的控制台事件处理
+        if SetConsoleCtrlHandler(None, TRUE) == 0 {
+            log::warn!("Failed to disable console ctrl handler");
+            return false;
+        }
+
+        // 附加到目标进程的控制台
+        if AttachConsole(pid) == 0 {
+            let error = std::io::Error::last_os_error();
+            log::warn!("Failed to attach to console of PID {}: {}", pid, error);
+            // 恢复控制台事件处理
+            SetConsoleCtrlHandler(None, FALSE);
+            return false;
+        }
+
+        // 发送 Ctrl+Break 事件到当前进程组
+        let result = GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, 0);
+
+        // 分离控制台
+        FreeConsole();
+
+        // 恢复控制台事件处理
+        SetConsoleCtrlHandler(None, FALSE);
+
+        if result == 0 {
+            let error = std::io::Error::last_os_error();
+            log::warn!("Failed to generate Ctrl+Break event: {}", error);
+            false
+        } else {
+            log::info!("Successfully sent Ctrl+Break to PID {}", pid);
+            true
+        }
+    }
+
+    /// 安全的 Ctrl+Break 发送包装函数
+    fn send_ctrl_break(pid: u32) -> bool {
+        // 不能向自己发送 Ctrl+Break
+        let current_pid = unsafe { GetCurrentProcessId() };
+        if pid == current_pid {
+            log::warn!("Cannot send Ctrl+Break to self");
+            return false;
+        }
+
+        unsafe { send_ctrl_break_internal(pid) }
+    }
+
+    /// 窗口枚举回调函数使用的上下文结构
+    struct WindowEnumContext {
+        target_pid: u32,
+        found: bool,
+    }
+
+    /// 发送 WM_CLOSE 消息到目标进程的所有顶层窗口
+    fn send_wm_close(pid: u32) -> bool {
+        let mut context = WindowEnumContext {
+            target_pid: pid,
+            found: false,
+        };
+
+        unsafe {
+            EnumWindows(
+                Some(enum_windows_callback),
+                &mut context as *mut _ as LPARAM,
+            );
+        }
+
+        if context.found {
+            log::info!("Sent WM_CLOSE to windows of PID {}", pid);
+        } else {
+            log::warn!("No windows found for PID {}", pid);
+        }
+
+        context.found
+    }
+
+    /// 窗口枚举回调函数
+    unsafe extern "system" fn enum_windows_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let context = &mut *(lparam as *mut WindowEnumContext);
+        let mut window_pid: u32 = 0;
+
+        // 获取窗口所属进程ID
+        GetWindowThreadProcessId(hwnd, &mut window_pid);
+
+        if window_pid == context.target_pid {
+            // 发送 WM_CLOSE 消息
+            PostMessageW(hwnd, WM_CLOSE, 0 as WPARAM, 0 as LPARAM);
+            context.found = true;
+        }
+
+        TRUE // 继续枚举
+    }
+
+    /// 等待进程退出
+    async fn wait_for_exit(pid: u32, timeout_secs: u64) -> bool {
+        let start = std::time::Instant::now();
+        let timeout = Duration::from_secs(timeout_secs);
+
+        while start.elapsed() < timeout {
+            // 检查进程是否仍在运行
+            if !is_process_running(pid) {
+                return true;
+            }
+
+            // 短暂等待
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        false
+    }
+
+    /// 检查进程是否仍在运行
+    fn is_process_running(pid: u32) -> bool {
+        use std::process::Command;
+
+        // 使用 tasklist 检查进程是否存在
+        let output = Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {}", pid), "/FO", "CSV", "/NH"])
+            .output();
+
+        match output {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                stdout.contains(&pid.to_string())
+            }
+            Err(_) => false,
+        }
+    }
+
+    /// 强制终止进程及其子进程
+    async fn force_terminate(pid: u32) -> Result<(), AppError> {
+        log::warn!("Force terminating PID {} and its children", pid);
+
+        // 使用 taskkill /F /T 强制终止进程树
+        let output = Command::new("taskkill")
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .output()
+            .await
+            .map_err(|e| ProcessError::TerminateFailed(format!("Failed to execute taskkill: {}", e)))?;
+
+        if output.status.success() {
+            log::info!("Successfully force terminated PID {}", pid);
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let err_msg = format!("taskkill failed: {}", stderr);
+            log::error!("{}", err_msg);
+            Err(ProcessError::TerminateFailed(err_msg).into())
+        }
+    }
+}
+
+/// Unix 平台进程管理实现
+#[cfg(unix)]
+mod unix_process {
+    use super::*;
+    use nix::sys::signal::{self, Signal};
+    use nix::unistd::Pid;
+    use std::process::Command;
+
+    /// Unix 优雅关闭三级策略：
+    /// 1. SIGTERM 信号
+    /// 2. SIGINT 信号
+    /// 3. SIGKILL 强制终止
+    pub async fn graceful_shutdown(pid: u32, timeout_secs: u64) -> Result<(), AppError> {
+        log::info!("Attempting graceful shutdown for PID {}", pid);
+
+        let nix_pid = Pid::from_raw(pid as i32);
+
+        // 方案1: SIGTERM 信号
+        log::info!("Phase 1: Sending SIGTERM to PID {}", pid);
+        match signal::kill(nix_pid, Signal::SIGTERM) {
+            Ok(_) => {
+                if wait_for_exit(pid, timeout_secs / 3).await {
+                    log::info!("Process {} exited after SIGTERM", pid);
+                    return Ok(());
+                }
+            }
+            Err(e) => {
+                log::warn!("Failed to send SIGTERM to PID {}: {}", pid, e);
+            }
+        }
+
+        // 方案2: SIGINT 信号
+        log::info!("Phase 2: Sending SIGINT to PID {}", pid);
+        match signal::kill(nix_pid, Signal::SIGINT) {
+            Ok(_) => {
+                if wait_for_exit(pid, timeout_secs / 3).await {
+                    log::info!("Process {} exited after SIGINT", pid);
+                    return Ok(());
+                }
+            }
+            Err(e) => {
+                log::warn!("Failed to send SIGINT to PID {}: {}", pid, e);
+            }
+        }
+
+        // 方案3: SIGKILL 强制终止
+        log::warn!("Phase 3: Sending SIGKILL to PID {}", pid);
+        match signal::kill(nix_pid, Signal::SIGKILL) {
+            Ok(_) => {
+                // 给进程一点时间响应 SIGKILL
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                log::info!("Process {} force killed with SIGKILL", pid);
+                Ok(())
+            }
+            Err(e) => {
+                let err_msg = format!("Failed to send SIGKILL to PID {}: {}", pid, e);
+                log::error!("{}", err_msg);
+                Err(ProcessError::TerminateFailed(err_msg).into())
+            }
+        }
+    }
+
+    /// 等待进程退出
+    async fn wait_for_exit(pid: u32, timeout_secs: u64) -> bool {
+        let start = std::time::Instant::now();
+        let timeout = Duration::from_secs(timeout_secs);
+
+        while start.elapsed() < timeout {
+            // 检查进程是否仍在运行
+            if !is_process_running(pid) {
+                return true;
+            }
+
+            // 短暂等待
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        false
+    }
+
+    /// 检查进程是否仍在运行
+    fn is_process_running(pid: u32) -> bool {
+        // 使用 kill -0 检查进程是否存在
+        let output = Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .output();
+
+        match output {
+            Ok(output) => output.status.success(),
+            Err(_) => false,
+        }
+    }
+}
+
+/// 不支持的平台实现
+#[cfg(not(any(windows, unix)))]
+mod platform {
+    use super::*;
+
+    pub async fn graceful_shutdown(_pid: u32, _timeout_secs: u64) -> Result<(), AppError> {
+        Err(ProcessError::StopFailed("Unsupported platform".to_string()).into())
+    }
 }

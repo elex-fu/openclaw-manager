@@ -56,7 +56,7 @@ export function InstallerPanel() {
     queryFn: () => openclawApi.checkInstallation(),
   })
 
-  const status = statusData?.data
+  const status = statusData
   const isInstalled = status?.type === 'Installed'
   const isInstalling = status?.type === 'Installing'
 
@@ -105,9 +105,9 @@ export function InstallerPanel() {
       const results = await openclawApi.checkSystemEnvironment()
       
       setSystemChecks(prev => prev.map((check, index) => {
-        const result = results.data?.checks?.[index]
+        const result = results.checks?.[index]
         if (result) {
-          addLog(`${check.name}: ${result.passed ? '通过' : '未通过'} - ${result.message}`, 
+          addLog(`${check.name}: ${result.passed ? '通过' : '未通过'} - ${result.message}`,
             result.passed ? 'success' : result.required ? 'error' : 'warning')
           return { ...check, status: result.passed ? 'success' : result.required ? 'error' : 'warning', message: result.message }
         }
@@ -130,7 +130,7 @@ export function InstallerPanel() {
         addLog('安装完成！', 'success')
         queryClient.invalidateQueries({ queryKey: ['openclaw-status'] })
       } else {
-        addLog(`安装失败: ${data.error}`, 'error')
+        addLog(`安装失败: ${data.message}`, 'error')
       }
     },
     onError: (error: Error) => {
@@ -149,7 +149,7 @@ export function InstallerPanel() {
   const startServiceMutation = useMutation({
     mutationFn: serviceApi.startService,
     onSuccess: (data) => {
-      addLog(data.success ? '服务启动成功' : `启动失败: ${data.error || '未知错误'}`, data.success ? 'success' : 'error')
+      addLog(data ? '服务启动成功' : '启动失败: 未知错误', data ? 'success' : 'error')
     }
   })
 
@@ -160,11 +160,7 @@ export function InstallerPanel() {
       return result
     },
     onSuccess: (data) => {
-      if (data.success) {
-        addLog(data.data || '命令执行成功', 'success')
-      } else {
-        addLog(data.error || '命令执行失败', 'error')
-      }
+      addLog(data || '命令执行成功', 'success')
     }
   })
 

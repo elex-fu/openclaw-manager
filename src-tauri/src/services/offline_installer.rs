@@ -1,4 +1,14 @@
 //! 离线安装包支持
+//!
+//! 支持6个平台组合：
+//! - macOS x64 (Intel)
+//! - macOS ARM64 (Apple Silicon)
+//! - Windows x64
+//! - Windows ARM64
+//! - Linux x64
+//! - Linux ARM64
+//!
+//! 使用条件编译优化单平台构建体积
 
 #![allow(dead_code)]
 
@@ -40,6 +50,107 @@ impl std::fmt::Display for Arch {
     }
 }
 
+/// 平台资源 trait - 用于条件编译
+pub trait PlatformResource {
+    /// 获取当前平台的安装包文件名
+    fn package_filename() -> &'static str;
+    /// 获取当前平台类型
+    fn current_platform() -> Platform;
+    /// 获取当前架构
+    fn current_arch() -> Arch;
+}
+
+// macOS x64 支持
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+mod platform_impl {
+    use super::*;
+    pub struct CurrentPlatform;
+    impl PlatformResource for CurrentPlatform {
+        fn package_filename() -> &'static str { "openclaw-macos-x64.tar.gz" }
+        fn current_platform() -> Platform { Platform::MacOS }
+        fn current_arch() -> Arch { Arch::X86_64 }
+    }
+}
+
+// macOS ARM64 支持
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+mod platform_impl {
+    use super::*;
+    pub struct CurrentPlatform;
+    impl PlatformResource for CurrentPlatform {
+        fn package_filename() -> &'static str { "openclaw-macos-arm64.tar.gz" }
+        fn current_platform() -> Platform { Platform::MacOS }
+        fn current_arch() -> Arch { Arch::ARM64 }
+    }
+}
+
+// Windows x64 支持
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+mod platform_impl {
+    use super::*;
+    pub struct CurrentPlatform;
+    impl PlatformResource for CurrentPlatform {
+        fn package_filename() -> &'static str { "openclaw-windows-x64.zip" }
+        fn current_platform() -> Platform { Platform::Windows }
+        fn current_arch() -> Arch { Arch::X86_64 }
+    }
+}
+
+// Windows ARM64 支持
+#[cfg(all(target_os = "windows", target_arch = "aarch64"))]
+mod platform_impl {
+    use super::*;
+    pub struct CurrentPlatform;
+    impl PlatformResource for CurrentPlatform {
+        fn package_filename() -> &'static str { "openclaw-windows-arm64.zip" }
+        fn current_platform() -> Platform { Platform::Windows }
+        fn current_arch() -> Arch { Arch::ARM64 }
+    }
+}
+
+// Linux x64 支持
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+mod platform_impl {
+    use super::*;
+    pub struct CurrentPlatform;
+    impl PlatformResource for CurrentPlatform {
+        fn package_filename() -> &'static str { "openclaw-linux-x64.tar.gz" }
+        fn current_platform() -> Platform { Platform::Linux }
+        fn current_arch() -> Arch { Arch::X86_64 }
+    }
+}
+
+// Linux ARM64 支持
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+mod platform_impl {
+    use super::*;
+    pub struct CurrentPlatform;
+    impl PlatformResource for CurrentPlatform {
+        fn package_filename() -> &'static str { "openclaw-linux-arm64.tar.gz" }
+        fn current_platform() -> Platform { Platform::Linux }
+        fn current_arch() -> Arch { Arch::ARM64 }
+    }
+}
+
+// 默认实现（用于测试或非目标平台编译）
+#[cfg(not(any(
+    all(target_os = "macos", target_arch = "x86_64"),
+    all(target_os = "macos", target_arch = "aarch64"),
+    all(target_os = "windows", target_arch = "x86_64"),
+    all(target_os = "windows", target_arch = "aarch64"),
+    all(target_os = "linux", target_arch = "x86_64"),
+    all(target_os = "linux", target_arch = "aarch64")
+)))]
+mod platform_impl {
+    use super::*;
+    pub struct CurrentPlatform;
+    impl PlatformResource for CurrentPlatform {
+        fn package_filename() -> &'static str { "openclaw-unknown.tar.gz" }
+        fn current_platform() -> Platform { Platform::Linux }
+        fn current_arch() -> Arch { Arch::X86_64 }
+    }
+}
+
 /// 安装包信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageInfo {
@@ -57,7 +168,10 @@ pub struct OfflineInstaller {
 impl OfflineInstaller {
     /// 创建当前平台的安装器
     pub fn for_current_platform() -> Result<Self> {
-        let (platform, arch) = detect_platform()?;
+        use platform_impl::CurrentPlatform;
+
+        let platform = CurrentPlatform::current_platform();
+        let arch = CurrentPlatform::current_arch();
 
         Ok(Self {
             package_info: PackageInfo {
@@ -71,16 +185,13 @@ impl OfflineInstaller {
 
     /// 获取安装包文件路径
     fn get_package_path(&self) -> Result<PathBuf> {
+        use platform_impl::CurrentPlatform;
+
         // 首先检查资源目录（生产环境）
         let resource_dir = get_resource_dir()?;
 
-        let filename = match (self.package_info.platform, self.package_info.arch) {
-            (Platform::Windows, Arch::X86_64) => "openclaw-windows-x64.zip",
-            (Platform::Linux, Arch::X86_64) => "openclaw-linux-x64.tar.gz",
-            (Platform::MacOS, Arch::X86_64) => "openclaw-macos-x64.tar.gz",
-            (Platform::MacOS, Arch::ARM64) => "openclaw-macos-arm64.tar.gz",
-            _ => return Err(anyhow::anyhow!("Unsupported platform/architecture combination")),
-        };
+        // 使用条件编译获取当前平台的文件名
+        let filename = CurrentPlatform::package_filename();
 
         log::info!("查找安装包: {}", filename);
         log::info!("资源目录: {:?}", resource_dir);
@@ -178,28 +289,30 @@ impl OfflineInstaller {
     }
 
     /// 解压安装包
+    ///
+    /// 使用条件编译选择解压方式，Windows 使用 zip，其他平台使用 tar.gz
+    #[cfg(target_os = "windows")]
     async fn extract_package(&self, data: &[u8], dest: &Path) -> Result<()> {
-        match self.package_info.platform {
-            Platform::Windows => {
-                // 使用 zip 解压
-                use zip::read::ZipArchive;
-                use std::io::Cursor;
+        use zip::read::ZipArchive;
+        use std::io::Cursor;
 
-                let reader = Cursor::new(data);
-                let mut archive = ZipArchive::new(reader)?;
-                archive.extract(dest)?;
-            }
-            _ => {
-                // 使用 tar.gz 解压
-                use flate2::read::GzDecoder;
-                use tar::Archive;
-                use std::io::Cursor;
+        let reader = Cursor::new(data);
+        let mut archive = ZipArchive::new(reader)?;
+        archive.extract(dest)?;
 
-                let gz = GzDecoder::new(Cursor::new(data));
-                let mut archive = Archive::new(gz);
-                archive.unpack(dest)?;
-            }
-        }
+        Ok(())
+    }
+
+    /// 解压安装包 (非 Windows 平台 - tar.gz)
+    #[cfg(not(target_os = "windows"))]
+    async fn extract_package(&self, data: &[u8], dest: &Path) -> Result<()> {
+        use flate2::read::GzDecoder;
+        use tar::Archive;
+        use std::io::Cursor;
+
+        let gz = GzDecoder::new(Cursor::new(data));
+        let mut archive = Archive::new(gz);
+        archive.unpack(dest)?;
 
         Ok(())
     }
@@ -295,20 +408,8 @@ fn get_resource_dir() -> Result<PathBuf> {
     Ok(exe_dir.to_path_buf())
 }
 
-/// 检测当前平台
-fn detect_platform() -> Result<(Platform, Arch)> {
-    let platform = match std::env::consts::OS {
-        "macos" => Platform::MacOS,
-        "windows" => Platform::Windows,
-        "linux" => Platform::Linux,
-        _ => return Err(anyhow::anyhow!("Unsupported platform")),
-    };
-
-    let arch = match std::env::consts::ARCH {
-        "x86_64" => Arch::X86_64,
-        "aarch64" => Arch::ARM64,
-        _ => return Err(anyhow::anyhow!("Unsupported architecture")),
-    };
-
-    Ok((platform, arch))
+/// 获取当前平台信息（用于调试和日志）
+pub fn current_platform_info() -> (Platform, Arch) {
+    use platform_impl::CurrentPlatform;
+    (CurrentPlatform::current_platform(), CurrentPlatform::current_arch())
 }

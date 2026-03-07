@@ -3,12 +3,12 @@
 //! 管理 Node.js 22、Python 3.10 等嵌入式运行环境
 //! 实现自动检测、按需解压、环境配置
 
-#![allow(dead_code)]
-
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::process::Command;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use std::process::Stdio;
 
 /// Runtime 类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -149,6 +149,45 @@ impl RuntimeBundle {
         }
 
         Ok(statuses)
+    }
+
+    /// 检查 Node.js 状态
+    pub async fn check_node_status(&self) -> Result<RuntimeStatus> {
+        let node_package = RuntimePackage::node22();
+        self.check_runtime(&node_package).await
+    }
+
+    /// 检查系统 Node.js
+    pub async fn check_system_node(&self) -> Result<Option<String>> {
+        let node_version = RuntimeVersion {
+            runtime_type: RuntimeType::Node,
+            version: "22.0.0".to_string(),
+            platform: Self::get_current_platform(),
+            arch: Self::get_current_arch(),
+        };
+        self.check_system_runtime(&node_version).await
+    }
+
+    /// 解压 Node.js runtime
+    pub async fn extract_node(&self) -> Result<()> {
+        let package = RuntimePackage::node22();
+        self.extract_runtime(&package).await
+    }
+
+    fn get_current_platform() -> String {
+        match std::env::consts::OS {
+            "macos" => "darwin".to_string(),
+            "windows" => "win32".to_string(),
+            _ => std::env::consts::OS.to_string(),
+        }
+    }
+
+    fn get_current_arch() -> String {
+        match std::env::consts::ARCH {
+            "x86_64" => "x64".to_string(),
+            "aarch64" => "arm64".to_string(),
+            _ => std::env::consts::ARCH.to_string(),
+        }
     }
 
     /// 检查特定 runtime 状态
@@ -468,6 +507,156 @@ impl RuntimeBundle {
             .unwrap_or(0);
 
         found_major >= required_major
+    }
+
+    /// 自动下载并安装 Node.js
+    pub async fn download_and_install_node<F>(&self, progress_cb: &mut F) -> Result<()>
+    where
+        F: FnMut(&str, f32),
+    {
+        let package = RuntimePackage::node22();
+        let download_url = format!(
+            "https://nodejs.org/dist/v22.0.0/{}",
+            package.archive_name
+        );
+
+        progress_cb("正在下载 Node.js...", 0.0);
+
+        let runtime_dir = self.get_runtime_dir(&RuntimeType::Node);
+        fs::create_dir_all(&runtime_dir).await?;
+
+        let download_path = runtime_dir.join(&package.archive_name);
+
+        // 使用 curl 下载
+        let output = Command::new("curl")
+            .args([
+                "-fsSL",
+                "--progress-bar",
+                "-o",
+                download_path.to_str().unwrap(),
+                &download_url,
+            ])
+            .output()
+            .await
+            .context("Failed to download Node.js")?;
+
+        if !output.status.success() {
+            return Err(anyhow::anyhow!(
+                "下载 Node.js 失败: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+
+        progress_cb("正在解压 Node.js...", 50.0);
+
+        // 解压
+        if download_path.extension().map(|e| e == "zip").unwrap_or(false) {
+            self.extract_zip(&download_path, &runtime_dir).await?;
+        } else {
+            self.extract_tar_gz(&download_path, &runtime_dir).await?;
+        }
+
+        // 清理下载文件
+        let _ = fs::remove_file(&download_path).await;
+
+        progress_cb("Node.js 安装完成", 100.0);
+        Ok(())
+    }
+
+    /// 获取 Node.js 可执行文件路径（优先使用嵌入式，其次系统）
+    pub async fn get_node_path(&self) -> Result<PathBuf> {
+        // 1. 检查嵌入式 Node.js
+        let embedded_path = self.get_executable_path(&RuntimeVersion {
+            runtime_type: RuntimeType::Node,
+            version: "22.0.0".to_string(),
+            platform: Self::get_current_platform(),
+            arch: Self::get_current_arch(),
+        });
+
+        if embedded_path.exists() {
+            return Ok(embedded_path);
+        }
+
+        // 2. 检查系统 Node.js
+        match Command::new("node").arg("--version").output().await {
+            Ok(output) if output.status.success() => {
+                return Ok(PathBuf::from("node"));
+            }
+            _ => {}
+        }
+
+        Err(anyhow::anyhow!("Node.js 未找到，请先安装 Node.js 22+"))
+    }
+
+    /// 在指定目录运行 npm install
+    pub async fn npm_install<F>(
+        &self,
+        working_dir: &Path,
+        progress_cb: &mut F,
+    ) -> Result<()>
+    where
+        F: FnMut(&str, f32),
+    {
+        let node_path = self.get_node_path().await?;
+        let npm_path = node_path.parent()
+            .map(|p| p.join("npm"))
+            .unwrap_or_else(|| PathBuf::from("npm"));
+
+        progress_cb("正在安装 npm 依赖...", 0.0);
+
+        let mut child = Command::new(&node_path)
+            .arg(&npm_path)
+            .arg("install")
+            .arg("--production")
+            .current_dir(working_dir)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .context("Failed to spawn npm install")?;
+
+        let stdout = child.stdout.take().context("Failed to get stdout")?;
+        let stderr = child.stderr.take().context("Failed to get stderr")?;
+
+        let mut stdout_reader = BufReader::new(stdout).lines();
+        let mut stderr_reader = BufReader::new(stderr).lines();
+
+        let mut last_progress = 0.0f32;
+
+        loop {
+            tokio::select! {
+                line = stdout_reader.next_line() => {
+                    if let Ok(Some(line)) = line {
+                        log::debug!("npm: {}", line);
+                        // 解析进度（简化版）
+                        if line.contains("added") {
+                            last_progress = (last_progress + 10.0).min(90.0);
+                            progress_cb(&line, last_progress);
+                        }
+                    }
+                }
+                line = stderr_reader.next_line() => {
+                    if let Ok(Some(line)) = line {
+                        log::debug!("npm stderr: {}", line);
+                    }
+                }
+                status = child.wait() => {
+                    match status {
+                        Ok(status) => {
+                            if !status.success() {
+                                return Err(anyhow::anyhow!("npm install 失败"));
+                            }
+                            break;
+                        }
+                        Err(e) => {
+                            return Err(anyhow::anyhow!("npm install 错误: {}", e));
+                        }
+                    }
+                }
+            }
+        }
+
+        progress_cb("依赖安装完成", 100.0);
+        Ok(())
     }
 
     /// 设置环境变量

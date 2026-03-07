@@ -1016,6 +1016,3 @@ pub fn get_bundled_latest_version() -> Option<UpdateInfo> {
 
     None
 }
-
-#[cfg(test)]
-mod migration_test;

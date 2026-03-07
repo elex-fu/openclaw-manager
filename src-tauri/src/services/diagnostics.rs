@@ -532,6 +532,13 @@ impl DiagnosticService {
                 true,
                 Some("尝试重新安装 OpenClaw".to_string()),
             ),
+            InstallStatus::NeedsDependencies => (
+                CheckStatus::Warning,
+                "OpenClaw 需要安装依赖".to_string(),
+                Some("缺少 node_modules，需要运行 npm install".to_string()),
+                true,
+                Some("点击安装按钮完成依赖安装".to_string()),
+            ),
         };
 
         Ok(DiagnosticCheck {

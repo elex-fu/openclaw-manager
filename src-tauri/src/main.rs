@@ -44,8 +44,8 @@ async fn auto_initialize(app_handle: &tauri::AppHandle) -> anyhow::Result<()> {
             log::info!("OpenClaw 正在安装中 ({}), 跳过初始化", stage);
             return Ok(());
         }
-        InstallStatus::NotInstalled | InstallStatus::Error { .. } => {
-            log::info!("OpenClaw 未安装，开始自动初始化...");
+        InstallStatus::NotInstalled | InstallStatus::Error { .. } | InstallStatus::NeedsDependencies => {
+            log::info!("OpenClaw 未安装或需要依赖，开始自动初始化...");
         }
     }
 
@@ -235,8 +235,20 @@ fn main() {
             commands::openclaw::get_openclaw_process_info,
             commands::openclaw::update_openclaw_config,
             commands::openclaw::start_openclaw_service,
+            commands::openclaw::stop_openclaw_service,
+            commands::openclaw::get_openclaw_service_status,
+            commands::openclaw::health_check_openclaw_service,
             commands::openclaw::check_system_environment,
             commands::openclaw::execute_openclaw_command,
+            // Sidecar 命令
+            commands::openclaw::check_sidecar_installation,
+            commands::openclaw::install_openclaw_sidecar,
+            commands::openclaw::start_sidecar_service,
+            commands::openclaw::stop_sidecar_service,
+            commands::openclaw::get_sidecar_state,
+            commands::openclaw::restart_sidecar_service,
+            commands::openclaw::execute_sidecar_command,
+            commands::openclaw::get_sidecar_version,
             commands::openclaw::check_for_updates,
             commands::openclaw::perform_update,
             commands::openclaw::perform_offline_update,
@@ -257,6 +269,9 @@ fn main() {
             commands::model::update_model_priority,
             commands::model::get_all_models_full,
             commands::model::save_model_full,
+            commands::model::delete_model,
+            commands::model::set_default_model,
+            commands::model::reorder_models,
             commands::log::get_log_sources,
             commands::log::get_recent_logs,
             commands::log::subscribe_logs,

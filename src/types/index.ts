@@ -474,3 +474,38 @@ export interface UpdateSkillConfigRequest {
   skill_id: string;
   config: Record<string, unknown>;
 }
+
+// 技能卡片通用属性接口
+export interface SkillCardItem {
+  id: string;
+  name: string;
+  description: string;
+  author: string;
+  version: string;
+  categories: string[];
+  tags: string[];
+  icon_url?: string;
+  rating: number;
+  downloads: number;
+}
+
+// ==================== Sidecar Types ====================
+
+export type SidecarInstallStatus =
+  | { type: 'NotInstalled' }
+  | { type: 'Installing'; stage: string; progress: number }
+  | { type: 'Installed'; version: string; path: string }
+  | { type: 'Error'; message: string };
+
+export interface SidecarInstallResult {
+  success: boolean;
+  version: string | null;
+  message: string;
+}
+
+export interface SidecarInfo {
+  version: string;
+  path: string;
+  isRunning: boolean;
+  pid?: number;
+}

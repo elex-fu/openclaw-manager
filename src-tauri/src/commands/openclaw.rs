@@ -144,6 +144,189 @@ pub async fn start_openclaw_service(
     }
 }
 
+/// 停止 OpenClaw 服务
+#[tauri::command]
+pub async fn stop_openclaw_service(
+    _state: State<'_, InstallerState>,
+) -> Result<ApiResponse<bool>, String> {
+    let process_name = if cfg!(target_os = "windows") {
+        "openclaw.exe"
+    } else {
+        "openclaw"
+    };
+
+    // 先检查是否有进程在运行
+    if !check_process_running(process_name) {
+        return Ok(ApiResponse::success(true)); // 服务未运行，视为成功停止
+    }
+
+    // 尝试停止所有 OpenClaw 相关进程
+    let result = if cfg!(target_os = "windows") {
+        // Windows: 使用 taskkill
+        std::process::Command::new("taskkill")
+            .args(["/F", "/IM", "openclaw.exe"])
+            .output()
+    } else {
+        // Unix: 使用 pkill
+        std::process::Command::new("pkill")
+            .args(["-f", "openclaw"])
+            .output()
+    };
+
+    match result {
+        Ok(output) => {
+            if output.status.success() {
+                // 等待进程实际停止
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                Ok(ApiResponse::success(true))
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                Ok(ApiResponse::error(format!("停止服务失败: {}", stderr)))
+            }
+        }
+        Err(e) => Ok(ApiResponse::error(format!("执行停止命令失败: {}", e))),
+    }
+}
+
+/// OpenClaw 服务状态信息
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct OpenClawServiceInfo {
+    pub running: bool,
+    pub pid: Option<u32>,
+    pub version: Option<String>,
+    pub uptime_seconds: Option<u64>,
+}
+
+/// 获取 OpenClaw 服务状态
+#[tauri::command]
+pub async fn get_openclaw_service_status(
+    state: State<'_, InstallerState>,
+) -> Result<ApiResponse<OpenClawServiceInfo>, String> {
+    let installer = state.installer.lock().await;
+
+    // 获取版本信息
+    let version = match installer.check_installation() {
+        Ok(InstallStatus::Installed { version }) => Some(version),
+        _ => None,
+    };
+
+    let process_name = if cfg!(target_os = "windows") {
+        "openclaw.exe"
+    } else {
+        "openclaw"
+    };
+
+    let running = check_process_running(process_name);
+
+    // 获取进程详情
+    let mut pid = None;
+    let mut uptime_seconds = None;
+
+    if running {
+        // 尝试获取第一个匹配的进程信息
+        #[cfg(unix)]
+        {
+            if let Ok(output) = std::process::Command::new("pgrep")
+                .args(["-o", "-f", "openclaw"])
+                .output()
+            {
+                if output.status.success() {
+                    let pid_str = String::from_utf8_lossy(&output.stdout);
+                    if let Ok(p) = pid_str.trim().parse::<u32>() {
+                        pid = Some(p);
+                    }
+                }
+            }
+        }
+        #[cfg(windows)]
+        {
+            // Windows: 使用 wmic 获取进程信息
+            if let Ok(output) = std::process::Command::new("wmic")
+                .args(["process", "where", "name='openclaw.exe'", "get", "ProcessId", "/value"])
+                .output()
+            {
+                let output_str = String::from_utf8_lossy(&output.stdout);
+                for line in output_str.lines() {
+                    if let Some(val) = line.strip_prefix("ProcessId=") {
+                        if let Ok(p) = val.trim().parse::<u32>() {
+                            pid = Some(p);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(ApiResponse::success(OpenClawServiceInfo {
+        running,
+        pid,
+        version,
+        uptime_seconds,
+    }))
+}
+
+/// 健康检查 OpenClaw 服务
+#[tauri::command]
+pub async fn health_check_openclaw_service(
+    _state: State<'_, InstallerState>,
+) -> Result<ApiResponse<HealthCheckResult>, String> {
+    let process_name = if cfg!(target_os = "windows") {
+        "openclaw.exe"
+    } else {
+        "openclaw"
+    };
+
+    let running = check_process_running(process_name);
+
+    if !running {
+        return Ok(ApiResponse::success(HealthCheckResult {
+            healthy: false,
+            message: "OpenClaw 服务未运行".to_string(),
+            response_time_ms: None,
+        }));
+    }
+
+    // 尝试连接到服务的健康检查端点
+    // 默认端口 8080，路径 /health
+    let start_time = std::time::Instant::now();
+
+    match reqwest::get("http://localhost:8080/health").await {
+        Ok(response) => {
+            let latency = start_time.elapsed().as_millis() as u64;
+            if response.status().is_success() {
+                Ok(ApiResponse::success(HealthCheckResult {
+                    healthy: true,
+                    message: "服务运行正常".to_string(),
+                    response_time_ms: Some(latency),
+                }))
+            } else {
+                Ok(ApiResponse::success(HealthCheckResult {
+                    healthy: false,
+                    message: format!("服务返回错误状态: {}", response.status()),
+                    response_time_ms: Some(latency),
+                }))
+            }
+        }
+        Err(e) => {
+            let latency = start_time.elapsed().as_millis() as u64;
+            Ok(ApiResponse::success(HealthCheckResult {
+                healthy: false,
+                message: format!("健康检查失败: {}", e),
+                response_time_ms: Some(latency),
+            }))
+        }
+    }
+}
+
+/// 健康检查结果
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct HealthCheckResult {
+    pub healthy: bool,
+    pub message: String,
+    pub response_time_ms: Option<u64>,
+}
+
 /// 系统环境检查结果
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SystemEnvironmentCheckResult {
@@ -905,4 +1088,134 @@ pub async fn get_current_agent(
 
     let current_agent = config.agents.into_iter().find(|a| a.id == current_id);
     Ok(ApiResponse::success(current_agent))
+}
+
+// ============================================================================
+// Sidecar 模式命令
+// ============================================================================
+
+use crate::installer::sidecar_installer::SidecarInstaller;
+use crate::services::sidecar_launcher::{SidecarLauncher, SidecarState};
+
+/// 检查 Sidecar OpenClaw 安装状态
+#[tauri::command]
+pub async fn check_sidecar_installation() -> Result<ApiResponse<InstallStatus>, String> {
+    let installer = SidecarInstaller::new()
+        .map_err(|e| format!("创建安装器失败: {}", e))?;
+
+    match installer.check_installation().await {
+        Ok(status) => Ok(ApiResponse::success(status)),
+        Err(e) => Ok(ApiResponse::error(format!("检查安装状态失败: {}", e))),
+    }
+}
+
+/// Sidecar 模式安装 OpenClaw
+#[tauri::command]
+pub async fn install_openclaw_sidecar(
+    window: Window,
+) -> Result<ApiResponse<InstallResult>, String> {
+    use crate::installer::InstallProgress;
+
+    // 创建进度通道
+    let (progress_tx, mut progress_rx) = mpsc::channel::<InstallProgress>(100);
+
+    // 创建安装器
+    let installer = SidecarInstaller::new()
+        .map_err(|e| format!("创建安装器失败: {}", e))?
+        .with_progress_channel(progress_tx);
+
+    // 在单独任务中发送进度事件
+    let window_clone = window.clone();
+    tokio::spawn(async move {
+        while let Some(progress) = progress_rx.recv().await {
+            let _ = window_clone.emit(
+                "install-progress",
+                serde_json::json!({
+                    "stage": progress.stage.to_string(),
+                    "percentage": progress.percentage,
+                    "message": progress.message,
+                }),
+            );
+        }
+    });
+
+    match installer.install().await {
+        Ok(result) => Ok(ApiResponse::success(result)),
+        Err(e) => Ok(ApiResponse::error(format!("安装失败: {}", e))),
+    }
+}
+
+/// 启动 Sidecar OpenClaw 服务
+#[tauri::command]
+pub async fn start_sidecar_service() -> Result<ApiResponse<u32>, String> {
+    let launcher = SidecarLauncher::new()
+        .map_err(|e| format!("创建启动器失败: {}", e))?;
+
+    match launcher.start().await {
+        Ok(pid) => Ok(ApiResponse::success(pid)),
+        Err(e) => Ok(ApiResponse::error(format!("启动服务失败: {}", e))),
+    }
+}
+
+/// 停止 Sidecar OpenClaw 服务
+#[tauri::command]
+pub async fn stop_sidecar_service() -> Result<ApiResponse<()>, String> {
+    let launcher = SidecarLauncher::new()
+        .map_err(|e| format!("创建启动器失败: {}", e))?;
+
+    match launcher.stop().await {
+        Ok(_) => Ok(ApiResponse::success(())),
+        Err(e) => Ok(ApiResponse::error(format!("停止服务失败: {}", e))),
+    }
+}
+
+/// 获取 Sidecar 服务状态
+#[tauri::command]
+pub async fn get_sidecar_state() -> Result<ApiResponse<SidecarState>, String> {
+    let launcher = SidecarLauncher::new()
+        .map_err(|e| format!("创建启动器失败: {}", e))?;
+
+    Ok(ApiResponse::success(launcher.get_state().await))
+}
+
+/// 重启 Sidecar OpenClaw 服务
+#[tauri::command]
+pub async fn restart_sidecar_service() -> Result<ApiResponse<u32>, String> {
+    let launcher = SidecarLauncher::new()
+        .map_err(|e| format!("创建启动器失败: {}", e))?;
+
+    match launcher.restart().await {
+        Ok(pid) => Ok(ApiResponse::success(pid)),
+        Err(e) => Ok(ApiResponse::error(format!("重启服务失败: {}", e))),
+    }
+}
+
+/// 执行 Sidecar OpenClaw CLI 命令
+#[tauri::command]
+pub async fn execute_sidecar_command(
+    command: String,
+    args: Option<Vec<String>>,
+) -> Result<ApiResponse<String>, String> {
+    let launcher = SidecarLauncher::new()
+        .map_err(|e| format!("创建启动器失败: {}", e))?;
+
+    let args_vec = args.unwrap_or_default();
+    let full_args = std::iter::once(command).chain(args_vec).collect::<Vec<_>>();
+
+    match launcher.execute_command(&full_args).await {
+        Ok(output) => Ok(ApiResponse::success(output)),
+        Err(e) => Ok(ApiResponse::error(format!("命令执行失败: {}", e))),
+    }
+}
+
+/// 获取 Sidecar OpenClaw 版本
+#[tauri::command]
+pub async fn get_sidecar_version() -> Result<ApiResponse<String>, String> {
+    let launcher = SidecarLauncher::new()
+        .map_err(|e| format!("创建启动器失败: {}", e))?;
+
+    match launcher.get_version().await {
+        Ok(version) => Ok(ApiResponse::success(version)),
+        Err(e) => Ok(ApiResponse::error(format!("获取版本失败: {}", e))),
+    }
 }

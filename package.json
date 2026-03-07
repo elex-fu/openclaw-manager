@@ -13,7 +13,9 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "build:offline-packages": "node scripts/build-offline-package.js",
+    "build:offline-packages:ps": "powershell -ExecutionPolicy Bypass -File scripts/build-offline-package.ps1"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

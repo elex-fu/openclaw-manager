@@ -51,7 +51,7 @@ import { AgentCard } from '@/components/openclaw/AgentCard'
 import { EmptyListState, EmptySearchState } from '@/components/error'
 import { StaggerContainer, StaggerItem, ScaleIn } from '@/components/animation'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import type { AgentConfig } from '@/types'
+import type { AgentConfig, ModelConfig } from '@/types'
 
 // 表单验证错误类型
 interface FormErrors {
@@ -251,25 +251,25 @@ export function AgentManager() {
     staleTime: 1000 * 60 * 5, // 5分钟
   })
 
-  const agentsList = agentsData?.data || []
-  const modelsList = modelsData?.data || []
+  const agentsList = agentsData || []
+  const modelsList = modelsData || []
 
   // 过滤 Agents - 使用 useMemo
   const filteredAgents = useMemo(() => {
     if (!searchQuery.trim()) return agentsList
     const query = searchQuery.toLowerCase()
     return agentsList.filter(
-      (agent) =>
+      (agent: AgentConfig) =>
         agent.name.toLowerCase().includes(query) ||
         agent.description?.toLowerCase().includes(query) ||
-        agent.skills.some((skill) => skill.toLowerCase().includes(query))
+        agent.skills.some((skill: string) => skill.toLowerCase().includes(query))
     )
   }, [agentsList, searchQuery])
 
   // 统计信息 - 使用 useMemo
   const stats = useMemo(() => {
     const total = agentsList.length
-    const enabled = agentsList.filter((a) => a.enabled).length
+    const enabled = agentsList.filter((a: AgentConfig) => a.enabled).length
     const disabled = total - enabled
     return { total, enabled, disabled }
   }, [agentsList])
@@ -402,7 +402,7 @@ export function AgentManager() {
   }, [])
 
   // 当前 Agent
-  const currentAgent = agentsList.find((a) => a.id === currentAgentId)
+  const currentAgent = agentsList.find((a: AgentConfig) => a.id === currentAgentId)
 
   // 判断是否使用虚拟滚动（当列表项超过20时使用）
   const useVirtualScroll = filteredAgents.length > 20
@@ -625,8 +625,8 @@ export function AgentManager() {
                       </SelectItem>
                     ) : (
                       modelsList
-                        .filter((m) => m.enabled)
-                        .map((model) => (
+                        .filter((m: ModelConfig) => m.enabled)
+                        .map((model: ModelConfig) => (
                           <SelectItem key={model.id} value={model.id}>
                             {model.name} ({model.provider})
                           </SelectItem>

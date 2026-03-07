@@ -9,15 +9,15 @@ import { PageTransition } from './components/animation'
 import { PageLoader } from './components/ui/loading'
 
 // 懒加载页面组件 - 按路由分割代码
-const Dashboard = lazy(() => import('./pages/Dashboard'))
-const InstallWizard = lazy(() => import('./pages/InstallWizard'))
-const ModelConfigPage = lazy(() => import('./pages/ModelConfig'))
-const AgentManager = lazy(() => import('./pages/AgentManager'))
-const Diagnostics = lazy(() => import('./pages/Diagnostics'))
-const SettingsPage = lazy(() => import('./pages/SettingsPage'))
-const UpdateManager = lazy(() => import('./pages/UpdateManager'))
-const LogViewer = lazy(() => import('./pages/LogViewer'))
-const SkillStore = lazy(() => import('./pages/SkillStore'))
+const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })))
+const InstallWizard = lazy(() => import('./pages/InstallWizard').then(m => ({ default: m.InstallWizard })))
+const ModelConfigPage = lazy(() => import('./pages/ModelConfig').then(m => ({ default: m.ModelConfigPage })))
+const AgentManager = lazy(() => import('./pages/AgentManager').then(m => ({ default: m.AgentManager })))
+const Diagnostics = lazy(() => import('./pages/Diagnostics').then(m => ({ default: m.Diagnostics })))
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
+const UpdateManager = lazy(() => import('./pages/UpdateManager').then(m => ({ default: m.UpdateManager })))
+const LogViewer = lazy(() => import('./pages/LogViewer').then(m => ({ default: m.LogViewer })))
+const SkillStore = lazy(() => import('./pages/SkillStore').then(m => ({ default: m.SkillStore })))
 
 // 页面加载占位符
 function PageSuspense({ children }: { children: React.ReactNode }) {

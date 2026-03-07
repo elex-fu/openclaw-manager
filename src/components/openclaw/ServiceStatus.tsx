@@ -31,7 +31,7 @@ export function ServiceStatus({ showActions = true, className }: ServiceStatusPr
     refetchInterval: 5000, // 每 5 秒刷新一次
   });
 
-  const serviceInfo = statusData?.data;
+  const serviceInfo = statusData;
 
   useEffect(() => {
     if (serviceInfo) {
@@ -46,7 +46,7 @@ export function ServiceStatus({ showActions = true, className }: ServiceStatusPr
       setGatewayStatus('starting');
     },
     onSuccess: (data) => {
-      if (data.success) {
+      if (data) {
         setGatewayStatus('running');
         refetch();
       } else {
@@ -68,7 +68,7 @@ export function ServiceStatus({ showActions = true, className }: ServiceStatusPr
       setGatewayStatus('stopping');
     },
     onSuccess: (data) => {
-      if (data.success) {
+      if (data) {
         setGatewayStatus('stopped');
         refetch();
       } else {

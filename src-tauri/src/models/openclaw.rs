@@ -93,6 +93,7 @@ pub enum InstallStatus {
     NotInstalled,
     Installing { stage: String, progress: f32 },
     Installed { version: String },
+    NeedsDependencies,
     Error { message: String },
 }
 

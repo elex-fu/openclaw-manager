@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { PageLoader } from '@/components/ui/loading'
+import { Badge } from '@/components/ui/badge'
 import {
   Bot,
   Brain,
@@ -12,9 +13,13 @@ import {
   Stethoscope,
   Download,
   CheckCircle,
-  XCircle
+  XCircle,
+  Package,
+  Play,
+  Square,
+  Loader2
 } from 'lucide-react'
-import { openclawApi, serviceApi } from '@/lib/tauri-api'
+import { openclawApi, serviceApi, sidecarApi } from '@/lib/tauri-api'
 import { useAppStore } from '@/stores/appStore'
 import { useConfigStore } from '@/stores/configStore'
 import { useInstallStore } from '@/stores/installStore'
@@ -41,22 +46,93 @@ export function Dashboard() {
   )
 
   // 查询安装状态
-  const { data: installData, isLoading: isInstallLoading, refetch: refetchInstall } = useQuery({
+  const { data: installStatus, isLoading: isInstallLoading, refetch: refetchInstall } = useQuery({
     queryKey: ['openclaw-installation'],
     queryFn: () => openclawApi.checkInstallation(),
     refetchInterval: 30000,
   })
+
+  // 查询 Sidecar 安装状态
+  const { data: sidecarStatus, isLoading: isSidecarLoading } = useQuery({
+    queryKey: ['sidecar-installation'],
+    queryFn: () => sidecarApi.checkSidecarInstallation(),
+    enabled: installStatus?.type === 'Installed',
+    refetchInterval: 30000,
+  })
+
+  const isInstalled = installStatus?.type === 'Installed'
 
   // 查询服务状态
   useQuery({
     queryKey: ['service-status'],
     queryFn: () => serviceApi.getServiceStatus(),
     refetchInterval: 5000,
-    enabled: installData?.data?.type === 'Installed',
+    enabled: installStatus?.type === 'Installed',
   })
 
-  const installStatus = installData?.data
-  const isInstalled = installStatus?.type === 'Installed'
+  // 查询 Sidecar 状态
+  const { data: sidecarData, refetch: refetchSidecar } = useQuery({
+    queryKey: ['sidecar-status'],
+    queryFn: () => sidecarApi.getSidecarInfo(),
+    refetchInterval: 10000,
+    enabled: isInstalled,
+  })
+
+  // 启动 Sidecar mutation
+  const startSidecarMutation = useMutation({
+    mutationFn: () => sidecarApi.startSidecar(),
+    onSuccess: (success) => {
+      if (success) {
+        addNotification({
+          title: 'Sidecar 已启动',
+          message: 'Sidecar 服务启动成功',
+          type: 'success',
+        })
+        refetchSidecar()
+      } else {
+        addNotification({
+          title: '启动失败',
+          message: '无法启动 Sidecar 服务',
+          type: 'error',
+        })
+      }
+    },
+    onError: (error) => {
+      addNotification({
+        title: '启动错误',
+        message: String(error),
+        type: 'error',
+      })
+    },
+  })
+
+  // 停止 Sidecar mutation
+  const stopSidecarMutation = useMutation({
+    mutationFn: () => sidecarApi.stopSidecar(),
+    onSuccess: (success) => {
+      if (success) {
+        addNotification({
+          title: 'Sidecar 已停止',
+          message: 'Sidecar 服务已停止',
+          type: 'info',
+        })
+        refetchSidecar()
+      } else {
+        addNotification({
+          title: '停止失败',
+          message: '无法停止 Sidecar 服务',
+          type: 'error',
+        })
+      }
+    },
+    onError: (error) => {
+      addNotification({
+        title: '停止错误',
+        message: String(error),
+        type: 'error',
+      })
+    },
+  })
 
   // 自动安装 mutation
   const autoInstallMutation = useMutation({
@@ -66,8 +142,8 @@ export function Dashboard() {
       setAutoInstallStarted(true)
     },
     onSuccess: (result) => {
-      if (result.data?.success) {
-        addLog(`✅ 初始化完成: ${result.data.message}`, 'success')
+      if (result.success) {
+        addLog(`✅ 初始化完成: ${result.message}`, 'success')
         addNotification({
           title: '准备就绪',
           message: 'OpenClaw 已成功初始化，可以开始使用',
@@ -75,7 +151,7 @@ export function Dashboard() {
         })
         refetchInstall()
       } else {
-        const errorMsg = result.error || result.data?.message || '未知错误'
+        const errorMsg = result.message || '未知错误'
         addLog(`❌ 初始化失败: ${errorMsg}`, 'error')
         addNotification({
           title: '初始化失败',
@@ -135,6 +211,13 @@ export function Dashboard() {
       })
     }
   }, [installStatus, addNotification])
+
+  // Sidecar 安装检查：OpenClaw 安装完成后，如果 Sidecar 未安装，跳转到安装向导
+  useEffect(() => {
+    if (isInstalled && !isSidecarLoading && sidecarStatus?.type === 'NotInstalled') {
+      navigate('/install')
+    }
+  }, [isInstalled, isSidecarLoading, sidecarStatus, navigate])
 
   // 正在自动安装时显示进度
   if (autoInstallMutation.isPending || (autoInstallStarted && !isInstalled)) {
@@ -229,6 +312,89 @@ export function Dashboard() {
         {/* Gateway 服务状态 */}
         <StaggerItem>
           <ServiceStatus />
+        </StaggerItem>
+
+        {/* Sidecar 状态 */}
+        <StaggerItem>
+          <Card className="hover:shadow-md transition-shadow" data-testid="sidecar-card">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Sidecar 状态</CardTitle>
+              <Package className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* 安装状态 */}
+              <div className="flex items-center gap-2" data-testid="sidecar-installed">
+                {sidecarData ? (
+                  <>
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                    <span className="text-2xl font-bold">已安装</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="h-5 w-5 text-red-500" />
+                    <span className="text-2xl font-bold">未安装</span>
+                  </>
+                )}
+              </div>
+
+              {/* 版本信息 */}
+              {sidecarData && (
+                <div data-testid="sidecar-version" className="text-xs text-muted-foreground">
+                  版本: {sidecarData.version}
+                </div>
+              )}
+
+              {/* 服务状态 */}
+              {sidecarData && (
+                <div data-testid="service-status" className="flex items-center gap-2">
+                  <Badge variant={sidecarData.isRunning ? "default" : "secondary"}>
+                    {sidecarData.isRunning ? '运行中' : '已停止'}
+                  </Badge>
+                  {sidecarData.pid && (
+                    <span className="text-xs text-muted-foreground">PID: {sidecarData.pid}</span>
+                  )}
+                </div>
+              )}
+
+              {/* 操作按钮 */}
+              {sidecarData && (
+                <div className="flex gap-2">
+                  {!sidecarData.isRunning ? (
+                    <Button
+                      data-testid="start-service"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => startSidecarMutation.mutate()}
+                      disabled={startSidecarMutation.isPending}
+                    >
+                      {startSidecarMutation.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Play className="mr-2 h-4 w-4" />
+                      )}
+                      启动
+                    </Button>
+                  ) : (
+                    <Button
+                      data-testid="stop-service"
+                      size="sm"
+                      variant="destructive"
+                      className="flex-1"
+                      onClick={() => stopSidecarMutation.mutate()}
+                      disabled={stopSidecarMutation.isPending}
+                    >
+                      {stopSidecarMutation.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Square className="mr-2 h-4 w-4" />
+                      )}
+                      停止
+                    </Button>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </StaggerItem>
 
         {/* 当前 Agent */}

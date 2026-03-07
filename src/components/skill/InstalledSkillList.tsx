@@ -21,8 +21,6 @@ import {
   Settings,
   Trash2,
   RefreshCw,
-  Check,
-  X,
 } from 'lucide-react'
 import type { InstalledSkill } from '@/types'
 

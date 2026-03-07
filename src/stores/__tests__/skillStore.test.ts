@@ -48,8 +48,9 @@ const mockMarketItem = (overrides: Partial<SkillMarketItem> = {}): SkillMarketIt
   tags: ['test', 'demo'],
   rating: 4.5,
   downloads: 100,
+  download_url: 'https://example.com/download',
   is_installed: false,
-  is_enabled: false,
+  has_update: false,
   ...overrides,
 })
 
@@ -213,11 +214,11 @@ describe('skillStore', () => {
       const items = [mockMarketItem({ id: '1', is_installed: false })]
 
       setMarketItems(items)
-      updateMarketItem('1', { is_installed: true, is_enabled: true })
+      updateMarketItem('1', { is_installed: true, has_update: false })
 
       const { marketItems } = useSkillStore.getState()
       expect(marketItems[0].is_installed).toBe(true)
-      expect(marketItems[0].is_enabled).toBe(true)
+      expect(marketItems[0].has_update).toBe(false)
     })
   })
 

@@ -37,21 +37,13 @@ describe('UpdateManager', () => {
 
   it('should render without crashing', () => {
     vi.mocked(tauriApi.updateApi.checkForUpdates).mockResolvedValue({
-      success: true,
-      data: {
-        currentVersion: '1.0.0',
-        latestVersion: '1.0.0',
-        hasUpdate: false,
-        updateInfo: null,
-      },
-      error: null,
+      currentVersion: '1.0.0',
+      latestVersion: '1.0.0',
+      hasUpdate: false,
+      updateInfo: null,
     })
 
-    vi.mocked(tauriApi.updateApi.getBackupList).mockResolvedValue({
-      success: true,
-      data: [],
-      error: null,
-    })
+    vi.mocked(tauriApi.updateApi.getBackupList).mockResolvedValue([])
 
     const { container } = render(<UpdateManager />)
     expect(container).toBeInTheDocument()
@@ -59,29 +51,21 @@ describe('UpdateManager', () => {
 
   it('should check for updates on mount', async () => {
     vi.mocked(tauriApi.updateApi.checkForUpdates).mockResolvedValue({
-      success: true,
-      data: {
-        currentVersion: '1.0.0',
-        latestVersion: '1.1.0',
-        hasUpdate: true,
-        updateInfo: {
-          version: '1.1.0',
-          releaseDate: '2024-03-01',
-          changelog: 'Bug fixes',
-          downloadUrl: 'https://example.com/download',
-          checksum: 'abc123',
-          mandatory: false,
-          minSupportedVersion: null,
-        },
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      hasUpdate: true,
+      updateInfo: {
+        version: '1.1.0',
+        releaseDate: '2024-03-01',
+        changelog: 'Bug fixes',
+        downloadUrl: 'https://example.com/download',
+        checksum: 'abc123',
+        mandatory: false,
+        minSupportedVersion: null,
       },
-      error: null,
     })
 
-    vi.mocked(tauriApi.updateApi.getBackupList).mockResolvedValue({
-      success: true,
-      data: [],
-      error: null,
-    })
+    vi.mocked(tauriApi.updateApi.getBackupList).mockResolvedValue([])
 
     render(<UpdateManager />)
 
@@ -92,21 +76,13 @@ describe('UpdateManager', () => {
 
   it('should display current version', async () => {
     vi.mocked(tauriApi.updateApi.checkForUpdates).mockResolvedValue({
-      success: true,
-      data: {
-        currentVersion: '1.0.0',
-        latestVersion: '1.0.0',
-        hasUpdate: false,
-        updateInfo: null,
-      },
-      error: null,
+      currentVersion: '1.0.0',
+      latestVersion: '1.0.0',
+      hasUpdate: false,
+      updateInfo: null,
     })
 
-    vi.mocked(tauriApi.updateApi.getBackupList).mockResolvedValue({
-      success: true,
-      data: [],
-      error: null,
-    })
+    vi.mocked(tauriApi.updateApi.getBackupList).mockResolvedValue([])
 
     render(<UpdateManager />)
 
@@ -117,29 +93,21 @@ describe('UpdateManager', () => {
 
   it('should show update available when hasUpdate is true', async () => {
     vi.mocked(tauriApi.updateApi.checkForUpdates).mockResolvedValue({
-      success: true,
-      data: {
-        currentVersion: '1.0.0',
-        latestVersion: '1.1.0',
-        hasUpdate: true,
-        updateInfo: {
-          version: '1.1.0',
-          releaseDate: '2024-03-01',
-          changelog: 'New features',
-          downloadUrl: 'https://example.com/download',
-          checksum: 'abc123',
-          mandatory: false,
-          minSupportedVersion: null,
-        },
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      hasUpdate: true,
+      updateInfo: {
+        version: '1.1.0',
+        releaseDate: '2024-03-01',
+        changelog: 'New features',
+        downloadUrl: 'https://example.com/download',
+        checksum: 'abc123',
+        mandatory: false,
+        minSupportedVersion: null,
       },
-      error: null,
     })
 
-    vi.mocked(tauriApi.updateApi.getBackupList).mockResolvedValue({
-      success: true,
-      data: [],
-      error: null,
-    })
+    vi.mocked(tauriApi.updateApi.getBackupList).mockResolvedValue([])
 
     render(<UpdateManager />)
 
@@ -157,27 +125,19 @@ describe('UpdateManager', () => {
 
   it('should load backup list on mount', async () => {
     vi.mocked(tauriApi.updateApi.checkForUpdates).mockResolvedValue({
-      success: true,
-      data: {
-        currentVersion: '1.0.0',
-        latestVersion: '1.0.0',
-        hasUpdate: false,
-        updateInfo: null,
-      },
-      error: null,
+      currentVersion: '1.0.0',
+      latestVersion: '1.0.0',
+      hasUpdate: false,
+      updateInfo: null,
     })
 
-    vi.mocked(tauriApi.updateApi.getBackupList).mockResolvedValue({
-      success: true,
-      data: [
-        {
-          createdAt: '2024-03-01T12:00:00Z',
-          version: '1.0.0',
-          path: '/test/backup',
-        },
-      ],
-      error: null,
-    })
+    vi.mocked(tauriApi.updateApi.getBackupList).mockResolvedValue([
+      {
+        createdAt: '2024-03-01T12:00:00Z',
+        version: '1.0.0',
+        path: '/test/backup',
+      },
+    ])
 
     render(<UpdateManager />)
 
