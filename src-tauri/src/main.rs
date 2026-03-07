@@ -44,8 +44,8 @@ async fn auto_initialize(app_handle: &tauri::AppHandle) -> anyhow::Result<()> {
             log::info!("OpenClaw 正在安装中 ({}), 跳过初始化", stage);
             return Ok(());
         }
-        InstallStatus::NotInstalled | InstallStatus::Error { .. } => {
-            log::info!("OpenClaw 未安装，开始自动初始化...");
+        InstallStatus::NotInstalled | InstallStatus::Error { .. } | InstallStatus::NeedsDependencies => {
+            log::info!("OpenClaw 未安装或需要依赖，开始自动初始化...");
         }
     }
 

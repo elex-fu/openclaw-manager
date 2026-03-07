@@ -12,7 +12,8 @@ use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 
 /// Sidecar 进程状态
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type")]
 pub enum SidecarState {
     Stopped,
     Starting,
@@ -154,7 +155,7 @@ impl SidecarLauncher {
 
         let node_path = self.get_node_path().await?;
 
-        log::debug!("执行命令: node {:?} {:?} {:?}", entry_path, args.join(" "));
+        log::debug!("执行命令: node {:?} {}", entry_path, args.join(" "));
 
         let output = Command::new(&node_path)
             .arg(&entry_path)

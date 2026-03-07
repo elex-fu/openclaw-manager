@@ -290,28 +290,33 @@ server:
         ))
     }
 
-    /// 递归复制目录
+    /// 复制目录（使用栈实现，避免递归导致的 Send 边界问题）
     async fn copy_dir_all(&self, src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
-        let src = src.as_ref();
-        let dst = dst.as_ref();
+        let src = src.as_ref().to_path_buf();
+        let dst = dst.as_ref().to_path_buf();
 
-        fs::create_dir_all(&dst).await?;
+        // 使用栈来处理目录
+        let mut stack = vec![(src, dst)];
 
-        let mut entries = fs::read_dir(src).await?;
+        while let Some((current_src, current_dst)) = stack.pop() {
+            fs::create_dir_all(&current_dst).await?;
 
-        while let Some(entry) = entries.next_entry().await? {
-            let file_type = entry.file_type().await?;
-            let src_path = entry.path();
-            let dst_path = dst.join(entry.file_name());
+            let mut entries = fs::read_dir(&current_src).await?;
 
-            if file_type.is_dir() {
-                // 跳过 node_modules（如果存在）
-                if entry.file_name() == "node_modules" {
-                    continue;
+            while let Some(entry) = entries.next_entry().await? {
+                let file_type = entry.file_type().await?;
+                let src_path = entry.path();
+                let dst_path = current_dst.join(entry.file_name());
+
+                if file_type.is_dir() {
+                    // 跳过 node_modules（如果存在）
+                    if entry.file_name() == "node_modules" {
+                        continue;
+                    }
+                    stack.push((src_path, dst_path));
+                } else {
+                    fs::copy(&src_path, &dst_path).await?;
                 }
-                Box::pin(self.copy_dir_all(&src_path, &dst_path)).await?;
-            } else {
-                fs::copy(&src_path, &dst_path).await?;
             }
         }
 

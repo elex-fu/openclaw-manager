@@ -588,22 +588,6 @@ impl RuntimeBundle {
         Err(anyhow::anyhow!("Node.js 未找到，请先安装 Node.js 22+"))
     }
 
-    fn get_current_platform() -> String {
-        match std::env::consts::OS {
-            "macos" => "darwin".to_string(),
-            "windows" => "win32".to_string(),
-            _ => std::env::consts::OS.to_string(),
-        }
-    }
-
-    fn get_current_arch() -> String {
-        match std::env::consts::ARCH {
-            "x86_64" => "x64".to_string(),
-            "aarch64" => "arm64".to_string(),
-            _ => std::env::consts::ARCH.to_string(),
-        }
-    }
-
     /// 在指定目录运行 npm install
     pub async fn npm_install<F>(
         &self,
