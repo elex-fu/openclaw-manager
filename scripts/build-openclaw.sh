@@ -864,6 +864,63 @@ copy_to_manager() {
     ls -lh "$BUNDLED_DIR"/openclaw-*.tar.gz "$BUNDLED_DIR"/openclaw-*.zip 2>/dev/null | tail -5 || true
 }
 
+# 下载 Node.js 运行时
+download_nodejs_runtime() {
+    log_step "下载 Node.js 运行时..."
+
+    local runtimes_dir="$BUNDLED_DIR/runtimes"
+    mkdir -p "$runtimes_dir"
+
+    # 检测平台
+    local platform arch ext
+    case "$PLATFORM" in
+        macos)
+            platform="darwin"
+            ext=".tar.gz"
+            ;;
+        linux)
+            platform="linux"
+            ext=".tar.xz"
+            ;;
+        windows)
+            platform="win32"
+            ext=".zip"
+            ;;
+        *)
+            log_error "不支持的平台: $PLATFORM"
+            return 1
+            ;;
+    esac
+
+    case "$ARCH" in
+        x64) arch="x64" ;;
+        arm64) arch="arm64" ;;
+        *) arch="$ARCH" ;;
+    esac
+
+    local node_version="22.14.0"  # 使用最新的 LTS 版本
+    local archive_name="node-v${node_version}-${platform}-${arch}${ext}"
+    local download_url="https://nodejs.org/dist/v${node_version}/${archive_name}"
+    local output_file="$runtimes_dir/${archive_name}"
+
+    # 检查是否已存在
+    if [ -f "$output_file" ]; then
+        log_info "Node.js 运行时已存在: $archive_name"
+        return 0
+    fi
+
+    log_info "下载: $download_url"
+    log_info "保存到: $output_file"
+
+    # 使用 curl 下载
+    if ! curl -fsSL --progress-bar "$download_url" -o "$output_file"; then
+        log_warn "下载 Node.js 失败，使用系统 Node.js 作为备选"
+        return 1
+    fi
+
+    log_info "✓ Node.js 运行时下载完成"
+}
+
 # 主流程
 main() {
     echo "========================================"
@@ -883,6 +940,10 @@ main() {
     detect_platform
     prepare_openclaw
     package_openclaw
+
+    # 下载 Node.js 运行时（用于 Sidecar 模式）
+    download_nodejs_runtime || true
+
     copy_to_manager
 
     # 清理旧包

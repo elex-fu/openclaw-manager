@@ -14,3 +14,4 @@ pub mod plugin_manager;
 pub mod plugin_market;
 pub mod skill_manager;
 pub mod skill_market;
+pub mod sidecar_launcher;

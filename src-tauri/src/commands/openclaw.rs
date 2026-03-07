@@ -1089,3 +1089,133 @@ pub async fn get_current_agent(
     let current_agent = config.agents.into_iter().find(|a| a.id == current_id);
     Ok(ApiResponse::success(current_agent))
 }
+
+// ============================================================================
+// Sidecar 模式命令
+// ============================================================================
+
+use crate::installer::sidecar_installer::SidecarInstaller;
+use crate::services::sidecar_launcher::{SidecarLauncher, SidecarState};
+
+/// 检查 Sidecar OpenClaw 安装状态
+#[tauri::command]
+pub async fn check_sidecar_installation() -> Result<ApiResponse<InstallStatus>, String> {
+    let installer = SidecarInstaller::new()
+        .map_err(|e| format!("创建安装器失败: {}", e))?;
+
+    match installer.check_installation().await {
+        Ok(status) => Ok(ApiResponse::success(status)),
+        Err(e) => Ok(ApiResponse::error(format!("检查安装状态失败: {}", e))),
+    }
+}
+
+/// Sidecar 模式安装 OpenClaw
+#[tauri::command]
+pub async fn install_openclaw_sidecar(
+    window: Window,
+) -> Result<ApiResponse<InstallResult>, String> {
+    use crate::installer::InstallProgress;
+
+    // 创建进度通道
+    let (progress_tx, mut progress_rx) = mpsc::channel::<InstallProgress>(100);
+
+    // 创建安装器
+    let installer = SidecarInstaller::new()
+        .map_err(|e| format!("创建安装器失败: {}", e))?
+        .with_progress_channel(progress_tx);
+
+    // 在单独任务中发送进度事件
+    let window_clone = window.clone();
+    tokio::spawn(async move {
+        while let Some(progress) = progress_rx.recv().await {
+            let _ = window_clone.emit(
+                "install-progress",
+                serde_json::json!({
+                    "stage": progress.stage.to_string(),
+                    "percentage": progress.percentage,
+                    "message": progress.message,
+                }),
+            );
+        }
+    });
+
+    match installer.install().await {
+        Ok(result) => Ok(ApiResponse::success(result)),
+        Err(e) => Ok(ApiResponse::error(format!("安装失败: {}", e))),
+    }
+}
+
+/// 启动 Sidecar OpenClaw 服务
+#[tauri::command]
+pub async fn start_sidecar_service() -> Result<ApiResponse<u32>, String> {
+    let launcher = SidecarLauncher::new()
+        .map_err(|e| format!("创建启动器失败: {}", e))?;
+
+    match launcher.start().await {
+        Ok(pid) => Ok(ApiResponse::success(pid)),
+        Err(e) => Ok(ApiResponse::error(format!("启动服务失败: {}", e))),
+    }
+}
+
+/// 停止 Sidecar OpenClaw 服务
+#[tauri::command]
+pub async fn stop_sidecar_service() -> Result<ApiResponse<()>, String> {
+    let launcher = SidecarLauncher::new()
+        .map_err(|e| format!("创建启动器失败: {}", e))?;
+
+    match launcher.stop().await {
+        Ok(_) => Ok(ApiResponse::success(())),
+        Err(e) => Ok(ApiResponse::error(format!("停止服务失败: {}", e))),
+    }
+}
+
+/// 获取 Sidecar 服务状态
+#[tauri::command]
+pub async fn get_sidecar_state() -> Result<ApiResponse<SidecarState>, String> {
+    let launcher = SidecarLauncher::new()
+        .map_err(|e| format!("创建启动器失败: {}", e))?;
+
+    Ok(ApiResponse::success(launcher.get_state().await))
+}
+
+/// 重启 Sidecar OpenClaw 服务
+#[tauri::command]
+pub async fn restart_sidecar_service() -> Result<ApiResponse<u32>, String> {
+    let launcher = SidecarLauncher::new()
+        .map_err(|e| format!("创建启动器失败: {}", e))?;
+
+    match launcher.restart().await {
+        Ok(pid) => Ok(ApiResponse::success(pid)),
+        Err(e) => Ok(ApiResponse::error(format!("重启服务失败: {}", e))),
+    }
+}
+
+/// 执行 Sidecar OpenClaw CLI 命令
+#[tauri::command]
+pub async fn execute_sidecar_command(
+    command: String,
+    args: Option<Vec<String>>,
+) -> Result<ApiResponse<String>, String> {
+    let launcher = SidecarLauncher::new()
+        .map_err(|e| format!("创建启动器失败: {}", e))?;
+
+    let args_vec = args.unwrap_or_default();
+    let full_args = std::iter::once(command).chain(args_vec).collect::<Vec<_>>();
+
+    match launcher.execute_command(&full_args).await {
+        Ok(output) => Ok(ApiResponse::success(output)),
+        Err(e) => Ok(ApiResponse::error(format!("命令执行失败: {}", e))),
+    }
+}
+
+/// 获取 Sidecar OpenClaw 版本
+#[tauri::command]
+pub async fn get_sidecar_version() -> Result<ApiResponse<String>, String> {
+    let launcher = SidecarLauncher::new()
+        .map_err(|e| format!("创建启动器失败: {}", e))?;
+
+    match launcher.get_version().await {
+        Ok(version) => Ok(ApiResponse::success(version)),
+        Err(e) => Ok(ApiResponse::error(format!("获取版本失败: {}", e))),
+    }
+}

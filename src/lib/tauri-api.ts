@@ -363,6 +363,16 @@ export const openclawApi = {
       callback(event.payload);
     });
   },
+
+  // ==================== Sidecar 模式 API ====================
+  checkSidecarInstallation: () =>
+    invokeWithRetry<InstallStatus>('check_sidecar_installation', undefined, { maxRetries: 2 }),
+
+  installSidecar: () =>
+    invokeWithRetry<InstallResult>('install_openclaw_sidecar', undefined, { maxRetries: 1 }),
+
+  getSidecarVersion: () =>
+    invokeWithRetry<string>('get_sidecar_version', undefined, { maxRetries: 2 }),
 };
 
 // ==================== Service API (OpenClaw服务控制) ====================
@@ -378,6 +388,22 @@ export const serviceApi = {
 
   healthCheck: () =>
     invokeWithRetry<{ healthy: boolean; message?: string }>('health_check_openclaw_service', undefined, { maxRetries: 1 }),
+
+  // ==================== Sidecar 服务控制 ====================
+  startSidecar: () =>
+    invokeWithRetry<number>('start_sidecar_service', undefined, { maxRetries: 2 }),
+
+  stopSidecar: () =>
+    invokeWithRetry<void>('stop_sidecar_service', undefined, { maxRetries: 2 }),
+
+  getSidecarState: () =>
+    invokeWithRetry<{ type: string; pid?: number; message?: string }>('get_sidecar_state', undefined, { maxRetries: 2 }),
+
+  restartSidecar: () =>
+    invokeWithRetry<number>('restart_sidecar_service', undefined, { maxRetries: 2 }),
+
+  executeSidecarCommand: (command: string, args?: string[]) =>
+    invokeWithRetry<string>('execute_sidecar_command', { command, args }, { maxRetries: 2 }),
 };
 
 // ==================== Secure Storage API (新增) ====================

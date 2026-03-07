@@ -17,6 +17,10 @@ use tokio::sync::mpsc;
 pub mod runtime_bundle;
 pub use runtime_bundle::RuntimeBundle;
 
+// 引入 sidecar_installer 模块
+pub mod sidecar_installer;
+pub use sidecar_installer::SidecarInstaller;
+
 /// 系统检查结果
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SystemCheckResult {
